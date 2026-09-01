@@ -11,6 +11,7 @@ export const K_GH_PROFILE = 'tv_gh_profile_cache';
 export const K_GH_REPOS = 'tv_gh_repos_cache';
 export const K_RSS = 'tv_rss';
 export const K_RSS_CACHE = 'tv_rss_cache';
+export const K_RSS_REMOVED = 'tv_rss_removed'; // 用户主动删除过的默认源 URL
 
 const hasChromeStorage = typeof chrome !== 'undefined' && !!chrome.storage?.sync;
 

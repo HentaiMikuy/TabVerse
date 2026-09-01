@@ -1,5 +1,5 @@
 import { onMounted, readonly, ref, type Ref } from 'vue';
-import { K_RSS, storeGet, storeSet } from './useStorage';
+import { K_RSS, K_RSS_REMOVED, storeGet, storeSet } from './useStorage';
 
 /* ---------------- RSS 订阅（无需后端，直接用浏览器 fetch 解析 XML/Atom） ---------------- */
 
@@ -20,6 +20,7 @@ export interface RssFeed {
 
 export const DEFAULT_FEEDS: RssFeed[] = [
   { id: 'hn', title: 'Hacker News', url: 'https://hnrss.org/best' },
+  { id: 'google-research', title: 'Google Research Blog', url: 'https://blog.research.google/feeds/posts/default?alt=rss' },
   { id: 'portswigger', title: 'PortSwigger Research', url: 'https://portswigger.net/research/rss' },
   { id: 'github-blog', title: 'GitHub Blog', url: 'https://github.blog/feed/' },
   { id: 'krebs', title: 'Krebs on Security', url: 'https://krebsonsecurity.com/feed/' },
@@ -135,7 +136,14 @@ async function fetchFeedText(url: string): Promise<string> {
   let lastError = '';
   for (const attempt of attempts) {
     try {
-      return await attempt.run();
+      const text = await attempt.run();
+      // 个别代理会把错误以 200 + JSON/文本返回（如 corsproxy.io 缺 API key），
+      // 非 XML 内容视为本次尝试失败，继续回退到下一个代理
+      if (!text.trimStart().startsWith('<')) {
+        lastError = `${attempt.name} 返回了非 XML 内容`;
+        continue;
+      }
+      return text;
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         lastError = `${attempt.name} 超时`;
@@ -188,13 +196,38 @@ export function useRss() {
 
   async function loadFeeds() {
     await loadPersistedCache();
+    // 用户主动删除过的默认源 URL，迁移补源时不再加回
+    const removedSet = new Set((await storeGet<string[]>(K_RSS_REMOVED, [])) || []);
+
     const stored = await storeGet<RssFeed[] | null>(K_RSS, null);
     if (Array.isArray(stored) && stored.length) {
       // 丢弃已停用/失效的旧默认源（用户自定义的保留）
       const BROKEN = ['www.ruanyifeng.com', 'www.v2ex.com', 'news.ycombinator.com'];
-      feeds.value = stored.filter((f) => !BROKEN.some((b) => f.url.includes(b)));
-      if (!feeds.value.length) feeds.value = DEFAULT_FEEDS.slice();
-      // 把清理后的列表写回，避免下次再读到坏源
+      const list = stored.filter((f) => !BROKEN.some((b) => f.url.includes(b)));
+      if (!list.length) {
+        feeds.value = DEFAULT_FEEDS.slice();
+      } else {
+        // 老用户迁移：新增的默认源按默认位置补入（用户主动删过的除外），
+        // 其余条目保持存储中的顺序
+        const have = new Set(list.map((f) => f.url));
+        const merged: RssFeed[] = [];
+        let si = 0;
+        for (const def of DEFAULT_FEEDS) {
+          // 先取出存储列表中排在该默认源之前、且非默认源的自定义源（保持相对顺序）
+          while (si < list.length && !DEFAULT_FEEDS.some((d) => d.url === list[si].url)) {
+            merged.push(list[si++]);
+          }
+          const hit = list.find((f) => f.url === def.url);
+          if (hit) {
+            merged.push(hit);
+          } else if (!removedSet.has(def.url)) {
+            merged.push({ ...def }); // 新默认源，插入默认位置
+          }
+        }
+        while (si < list.length) merged.push(list[si++]);
+        feeds.value = merged;
+      }
+      // 把清理/补齐后的列表写回，避免下次再读到坏源
       storeSet(K_RSS, feeds.value);
     } else {
       feeds.value = DEFAULT_FEEDS.slice();
@@ -301,8 +334,15 @@ export function useRss() {
       error.value = '至少保留一个订阅源';
       return;
     }
+    const target = feeds.value.find((f) => f.id === id);
     feeds.value = feeds.value.filter((f) => f.id !== id);
     storeSet(K_RSS, feeds.value);
+    // 用户主动删掉的默认源记入黑名单，加载时的“补齐默认源”不会再把它加回
+    if (target && DEFAULT_FEEDS.some((d) => d.url === target.url)) {
+      const removed = new Set((await storeGet<string[]>(K_RSS_REMOVED, [])) || []);
+      removed.add(target.url);
+      storeSet(K_RSS_REMOVED, [...removed]);
+    }
     if (activeFeedId.value === id) {
       activeFeedId.value = feeds.value[0].id;
       await refresh();
