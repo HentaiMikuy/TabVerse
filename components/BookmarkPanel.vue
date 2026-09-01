@@ -31,6 +31,9 @@ const total = ref(0);
 const path = ref<string[]>([]); // 当前所在文件夹的 id 路径
 const shown = ref(0); // 当前目录/搜索结果已展示的条数
 const kw = ref('');
+const viewMode = ref<'dir' | 'split'>('dir'); // 浏览视图：目录钻取 / 双栏（左目录树 + 右书签）
+const expandedIds = ref<Set<string>>(new Set()); // 双栏视图左侧树的展开文件夹（默认展开顶层）
+const selectedId = ref<string>(''); // 双栏视图当前选中的文件夹
 
 const hasApi = typeof chrome !== 'undefined' && !!chrome.bookmarks?.getTree;
 
@@ -126,11 +129,83 @@ const limit = computed(() => shown.value || BOOKMARK_PAGE);
 const visibleLevel = computed(() => levelAll.value.slice(0, limit.value));
 const visibleMatched = computed(() => matched.value.slice(0, limit.value));
 
-const badgeText = computed(() => (searching.value ? String(matched.value.length) : String(total.value)));
+/* 双栏视图：左侧整棵目录树（可展开折叠），右侧展示选中文件夹的内容 */
+interface PaneRow {
+  kind: 'folder' | 'link';
+  node: BmNode;
+}
+
+function findFolder(nodes: BmNode[], id: string): BmNode | null {
+  for (const n of nodes || []) {
+    if (n.url) continue;
+    if (n.id === id) return n;
+    const found = findFolder(n.children || [], id);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** 返回 id 对应文件夹的祖先链（不含自身），选中时用它自动展开祖先 */
+function folderChain(nodes: BmNode[], id: string, trail: BmNode[] = []): BmNode[] | null {
+  for (const n of nodes || []) {
+    if (n.url) continue;
+    if (n.id === id) return trail;
+    const r = folderChain(n.children || [], id, [...trail, n]);
+    if (r) return r;
+  }
+  return null;
+}
+
+/** 左侧树可见行：按展开状态深度优先遍历，只包含文件夹 */
+const treeRows = computed(() => {
+  const out: { node: BmNode; depth: number }[] = [];
+  const walk = (nodes: BmNode[], depth: number) => {
+    for (const n of nodes || []) {
+      if (n.url) continue;
+      out.push({ node: n, depth });
+      if (expandedIds.value.has(n.id)) walk(n.children || [], depth + 1);
+    }
+  };
+  walk(tree.value, 0);
+  return out;
+});
+
+const selectedFolder = computed<BmNode | null>(() =>
+  selectedId.value ? findFolder(tree.value, selectedId.value) : null
+);
+/** 右侧内容：选中文件夹的直接子级，文件夹在前、书签在后 */
+const paneRows = computed<PaneRow[]>(() => {
+  const kids = selectedFolder.value?.children || [];
+  return kids
+    .filter((n) => !n.url)
+    .map((n): PaneRow => ({ kind: 'folder', node: n }))
+    .concat(kids.filter((n) => n.url).map((n): PaneRow => ({ kind: 'link', node: n })));
+});
+const visiblePaneRows = computed(() => paneRows.value.slice(0, limit.value));
+
+function toggleTree(node: BmNode) {
+  const next = new Set(expandedIds.value);
+  if (next.has(node.id)) next.delete(node.id);
+  else next.add(node.id);
+  expandedIds.value = next;
+}
+
+function selectFolder(id: string) {
+  selectedId.value = id;
+  shown.value = 0;
+  // 选中即展开其祖先链，保证节点在左侧树中可见
+  const chain = folderChain(tree.value, id);
+  if (chain?.length) {
+    const next = new Set(expandedIds.value);
+    for (const a of chain) next.add(a.id);
+    expandedIds.value = next;
+  }
+}
 
 const footText = computed(() => {
   if (!tree.value.length) return '';
   if (searching.value) return matched.value.length ? `匹配 ${matched.value.length} 条书签 · 已搜索全部文件夹` : '';
+  if (viewMode.value === 'split') return `全部共 ${total.value} 条书签`;
   const parts: string[] = [];
   if (folders.value.length) parts.push(`${folders.value.length} 个文件夹`);
   parts.push(`${levelLinks.value.length} 条书签`);
@@ -139,6 +214,13 @@ const footText = computed(() => {
 
 watch(kw, () => (shown.value = 0));
 watch(path, () => (shown.value = 0), { deep: true });
+watch(viewMode, () => {
+  shown.value = 0;
+  // 切到双栏时若还没有选中文件夹，默认选中第一个顶层文件夹
+  if (viewMode.value === 'split' && !selectedId.value && tree.value.length) {
+    selectFolder(tree.value[0].id);
+  }
+});
 
 function enterFolder(node: BmNode) {
   path.value.push(node.id);
@@ -162,6 +244,9 @@ async function loadBookmarks() {
     const raw = await chrome.bookmarks.getTree();
     tree.value = normalizeNodes(unwrapRoots(raw));
     total.value = countBookmarks(tree.value);
+    // 双栏视图默认展开顶层文件夹并选中第一个（通常是书签栏）
+    expandedIds.value = new Set(tree.value.map((n) => n.id));
+    if (tree.value.length) selectFolder(tree.value[0].id);
   } catch (e) {
     tree.value = [];
     total.value = 0;
@@ -177,13 +262,26 @@ onMounted(loadBookmarks);
     <div class="card-head">
       <div class="head-text">
         <h2>书签</h2>
-        <div class="card-sub">按文件夹浏览 · 输入关键字搜索</div>
+        <div class="card-sub">目录 / 双栏视图 · 输入关键字搜索</div>
       </div>
-      <span class="badge">{{ badgeText }}</span>
+      <button
+        class="icon-btn"
+        :title="viewMode === 'dir' ? '切换到双栏视图' : '切换到目录视图'"
+        @click="viewMode = viewMode === 'dir' ? 'split' : 'dir'"
+      >
+        <svg v-if="viewMode === 'dir'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M12 3v18" />
+        </svg>
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 6h13M8 12h13M8 18h13" />
+          <path d="M3 6h.01M3 12h.01M3 18h.01" />
+        </svg>
+      </button>
     </div>
     <input v-model="kw" class="line-input" type="text" placeholder="搜索书签或文件夹…" autocomplete="off" />
 
-    <div v-if="!searching && tree.length" class="bm-bar">
+    <div v-if="!searching && tree.length && viewMode === 'dir'" class="bm-bar">
       <button v-if="trail.length" class="bm-back" title="返回上一级" @click="goBack">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="m15 18-6-6 6-6" />
@@ -196,12 +294,91 @@ onMounted(loadBookmarks);
       </template>
     </div>
 
-    <ul class="bm-list">
+    <!-- 双栏视图：左侧目录树 + 右侧书签 -->
+    <div v-if="viewMode === 'split' && !searching && tree.length" class="bm-split">
+      <div class="bm-split-tree">
+        <div
+          v-for="row in treeRows"
+          :key="row.node.id"
+          class="bm-row bm-folder-row bm-tree-row"
+          :class="{ active: row.node.id === selectedId }"
+          :style="{ paddingLeft: 10 + row.depth * 14 + 'px' }"
+          :title="`${row.node.bookmarkCount} 条书签`"
+          @click="selectFolder(row.node.id)"
+        >
+          <span
+            v-if="row.node.children?.length"
+            class="bm-enter bm-caret"
+            :class="{ collapsed: !expandedIds.has(row.node.id) }"
+            @click.stop="toggleTree(row.node)"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </span>
+          <span v-else class="bm-enter"></span>
+          <span class="bm-folder-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            </svg>
+          </span>
+          <span class="bm-title">{{ row.node.title }}</span>
+          <span class="bm-folder-count">{{ row.node.bookmarkCount }}</span>
+        </div>
+        <div v-if="!treeRows.length" class="bm-empty">没有可浏览的文件夹</div>
+      </div>
+      <div class="bm-split-pane">
+        <div class="bm-split-head">
+          <span class="bm-split-title">{{ selectedFolder?.title || '全部书签' }}</span>
+          <span class="bm-split-count">{{ selectedFolder ? selectedFolder.bookmarkCount : total }} 条书签</span>
+        </div>
+        <ul class="bm-split-list">
+          <li v-if="!paneRows.length" class="bm-empty">这个文件夹是空的</li>
+          <template v-else>
+            <template v-for="row in visiblePaneRows" :key="row.node.id">
+              <li
+                v-if="row.kind === 'folder'"
+                class="bm-row bm-folder-row"
+                @click="selectFolder(row.node.id)"
+              >
+                <span class="bm-folder-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                  </svg>
+                </span>
+                <span class="bm-title">{{ row.node.title }}</span>
+                <span class="bm-folder-count">{{ row.node.bookmarkCount }}</span>
+                <span class="bm-enter">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 6 6 6-6 6" />
+                  </svg>
+                </span>
+              </li>
+              <li
+                v-else
+                class="bm-row bm-link"
+                :title="row.node.url"
+                @click="openLink(row.node.url!)"
+              >
+                <SiteIcon :url="row.node.url!" :name="row.node.title" />
+                <span class="bm-title">{{ row.node.title || hostOf(row.node.url!) }}</span>
+                <span class="bm-domain">{{ hostOf(row.node.url!) }}</span>
+              </li>
+            </template>
+            <li v-if="paneRows.length > visiblePaneRows.length" class="bm-more" @click="showMore">
+              显示更多（还有 {{ paneRows.length - visiblePaneRows.length }} 项）
+            </li>
+          </template>
+        </ul>
+      </div>
+    </div>
+
+    <ul v-else class="bm-list">
       <li v-if="!tree.length" class="bm-empty">
         {{ hasApi ? '没有找到书签，在 Chrome 中收藏一些网页试试' : '安装为扩展后可自动读取浏览器书签' }}
       </li>
       <li v-else-if="searching && !matched.length" class="bm-empty">没有匹配的书签</li>
-      <li v-else-if="!searching && !levelAll.length" class="bm-empty">这个文件夹是空的</li>
+      <li v-else-if="!searching && viewMode === 'dir' && !levelAll.length" class="bm-empty">这个文件夹是空的</li>
 
       <template v-else-if="searching">
         <li
