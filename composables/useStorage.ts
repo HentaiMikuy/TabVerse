@@ -11,6 +11,7 @@ export const K_GH_PROFILE = 'tv_gh_profile_cache';
 export const K_GH_REPOS = 'tv_gh_repos_cache';
 export const K_GH_RATE_LIMIT = 'tv_gh_rate_limit'; // core API 限流重置时间（ms）
 export const K_GH_SEARCH_RATE_LIMIT = 'tv_gh_search_rate_limit'; // search API 限流重置时间（ms）
+export const K_FAVICONS = 'tv_favicons'; // 站点图标缓存（存 chrome.storage.local，容量较大）
 export const K_RSS = 'tv_rss';
 export const K_RSS_CACHE = 'tv_rss_cache';
 export const K_RSS_REMOVED = 'tv_rss_removed'; // 用户主动删除过的默认源 URL
