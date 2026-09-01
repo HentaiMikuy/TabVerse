@@ -1,0 +1,23 @@
+{
+  "name": "tabverse",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "更聚合、更好用的新标签页：聚合搜索、快捷方式、天气、待办、浏览器书签。卡片式仪表盘。",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.2.7",
+    "@wxt-dev/module-vue": "^1.0.3",
+    "typescript": "~5.9.3",
+    "vue-tsc": "^2.2.0",
+    "wxt": "^0.20.11"
+  }
+}

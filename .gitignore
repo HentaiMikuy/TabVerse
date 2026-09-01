@@ -1,0 +1,7 @@
+node_modules/
+.pnpm-store/
+.tmp/
+.output/
+.wxt/
+*.zip
+.DS_Store
