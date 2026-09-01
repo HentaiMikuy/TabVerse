@@ -4,7 +4,7 @@ import { useRss } from '../composables/useRss';
 import { useToast } from '../composables/useToast';
 import SiteIcon from './SiteIcon.vue';
 
-const { feeds, activeFeed, items, loading, error, refresh, selectFeed, addFeed, moveFeed } = useRss();
+const { feeds, activeFeed, items, loading, error, refresh, selectFeed, addFeed, removeFeed, moveFeed } = useRss();
 const { toast } = useToast();
 
 const addUrl = ref('');
@@ -123,15 +123,15 @@ const isInitialLoad = computed(() => loading.value && items.value.length === 0);
 function relativeTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  const seconds = Math.round((date.getTime() - Date.now()) / 1000);
-  const abs = Math.abs(seconds);
-  if (abs < 60) return '刚刚';
+  // 取绝对值：过去（正常）与未来（源站时钟偏差）的时间都显示为正数时长
+  const seconds = Math.abs(Math.round((date.getTime() - Date.now()) / 1000));
+  if (seconds < 60) return '刚刚';
   const minutes = Math.round(seconds / 60);
-  if (Math.abs(minutes) < 60) return `${minutes} 分钟前`;
+  if (minutes < 60) return `${minutes} 分钟前`;
   const hours = Math.round(minutes / 60);
-  if (Math.abs(hours) < 24) return `${hours} 小时前`;
+  if (hours < 24) return `${hours} 小时前`;
   const days = Math.round(hours / 24);
-  if (Math.abs(days) < 30) return `${days} 天前`;
+  if (days < 30) return `${days} 天前`;
   const months = Math.round(days / 30);
   return `${months} 个月前`;
 }
@@ -143,6 +143,16 @@ async function submitAdd() {
     showAdd.value = false;
     toast('已添加订阅源');
   }
+}
+
+async function onRemoveFeed(id: string) {
+  if (feeds.value.length <= 1) {
+    toast('至少保留一个订阅源');
+    return;
+  }
+  const target = feeds.value.find((f) => f.id === id);
+  await removeFeed(id);
+  if (target) toast(`已删除订阅源「${target.title}」`);
 }
 </script>
 
@@ -188,7 +198,8 @@ async function submitAdd() {
         @drop="onChipDrop($event, feed.id)"
         @dragend="onChipDragEnd"
       >
-        {{ feed.title }}
+        <span class="rss-chip-title">{{ feed.title }}</span>
+        <span class="rss-chip-del" title="删除订阅源" draggable="false" @click.stop="onRemoveFeed(feed.id)">✕</span>
       </button>
     </div>
 

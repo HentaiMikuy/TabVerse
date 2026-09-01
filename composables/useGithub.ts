@@ -1,6 +1,6 @@
 import { onUnmounted, readonly, ref, watch, type Ref } from 'vue';
 import { HEAT_RANGE_DAYS, type HeatRange } from '../utils/common';
-import { K_GH_PROFILE, K_GH_REPOS, storeGet, storeSet } from './useStorage';
+import { K_GH_PROFILE, K_GH_RATE_LIMIT, K_GH_REPOS, K_GH_SEARCH_RATE_LIMIT, storeGet, storeRemove, storeSet } from './useStorage';
 
 /* ---------------- GitHub 限流识别与缓存 ---------------- */
 
@@ -19,6 +19,23 @@ function rateLimitResetAt(response: Response): number {
 
 function retryDelayMs(resetAtMs: number): number {
   return Math.min(Math.max(resetAtMs - Date.now() + 1000, 1000), 60 * 60 * 1000);
+}
+
+/* ---------------- 限流状态持久化：限流窗口内新开标签页直接提示倒计时，不再发无效请求 ---------------- */
+
+interface RateLimitMarker {
+  resetAt: number; // 限流重置时间（ms 时间戳）
+}
+
+/** 读取持久化的限流重置时间；窗口已过视为未限流（返回 0），下次成功后会被清除 */
+async function persistedRateLimitResetAt(key: string): Promise<number> {
+  const marker = await storeGet<RateLimitMarker | null>(key, null);
+  if (!marker || marker.resetAt <= Date.now()) return 0;
+  return marker.resetAt;
+}
+
+function rateLimitMessage(resetAt: number, label: string): string {
+  return `${label}，约 ${Math.ceil(retryDelayMs(resetAt) / 1000)} 秒后自动重试`;
 }
 
 /** 带超时的 fetch：超时或外部信号中止时以 AbortError 拒绝，避免请求挂起导致界面一直 loading */
@@ -172,6 +189,20 @@ export function useGithubRepos(language: Ref<string>, period: Ref<GithubPeriod>,
       }
     }
 
+    // 限流窗口内：直接提示并挂自动重试，不再发无效请求（重试按钮 force=true 可绕过）
+    if (!force) {
+      const resetAt = await persistedRateLimitResetAt(K_GH_SEARCH_RATE_LIMIT);
+      if (resetAt > 0) {
+        loading.value = false;
+        error.value = rateLimitMessage(resetAt, 'GitHub 搜索接口限流（10 次/分钟）');
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          void refresh(true);
+        }, retryDelayMs(resetAt));
+        return;
+      }
+    }
+
     const ctrl = new AbortController();
     controller = ctrl;
     loading.value = true;
@@ -187,12 +218,12 @@ export function useGithubRepos(language: Ref<string>, period: Ref<GithubPeriod>,
         if (isRateLimitedResponse(response)) {
           const resetAt = rateLimitResetAt(response);
           if (resetAt > 0) {
-            const delay = retryDelayMs(resetAt);
-            error.value = `GitHub 搜索接口限流（10 次/分钟），约 ${Math.ceil(delay / 1000)} 秒后自动重试`;
+            void storeSet(K_GH_SEARCH_RATE_LIMIT, { resetAt });
+            error.value = rateLimitMessage(resetAt, 'GitHub 搜索接口限流（10 次/分钟）');
             retryTimer = setTimeout(() => {
               retryTimer = null;
               void refresh(true);
-            }, delay);
+            }, retryDelayMs(resetAt));
           } else {
             error.value = 'GitHub 搜索接口限流，请稍后重试';
           }
@@ -205,6 +236,7 @@ export function useGithubRepos(language: Ref<string>, period: Ref<GithubPeriod>,
       if (!Array.isArray(payload.items)) throw new Error('GitHub 返回了无法解析的数据');
       repos.value = payload.items.map(mapRepo);
       void storeSet(K_GH_REPOS, { key: cacheKey, fetchedAt: Date.now(), repos: repos.value });
+      void storeRemove(K_GH_SEARCH_RATE_LIMIT);
     } catch (err) {
       if (ctrl.signal.aborted || version !== requestVersion) return;
       // 内部超时中止（AbortError 但外部 signal 未中止）
@@ -496,6 +528,20 @@ export function useGithubProfile(username: Ref<string | null>, range: Ref<HeatRa
       }
     }
 
+    // 限流窗口内：直接提示并挂自动重试，不再发无效请求（重试按钮 force=true 可绕过）
+    if (!force) {
+      const resetAt = await persistedRateLimitResetAt(K_GH_RATE_LIMIT);
+      if (resetAt > 0) {
+        loading.value = false;
+        error.value = rateLimitMessage(resetAt, 'GitHub 接口限流（配额用尽）');
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          void refresh(true);
+        }, retryDelayMs(resetAt));
+        return;
+      }
+    }
+
     const ctrl = new AbortController();
     controller = ctrl;
     loading.value = true;
@@ -535,15 +581,16 @@ export function useGithubProfile(username: Ref<string | null>, range: Ref<HeatRa
             }
           : null;
       } else if (isRateLimitedResponse(response)) {
-        // 未认证配额耗尽（403 + X-RateLimit-Remaining: 0）：提示并在重置后自动重试
+        // 未认证配额耗尽（403 + X-RateLimit-Remaining: 0）：持久化重置时间，
+        // 新开标签页在窗口内直接提示倒计时；提示并在重置后自动重试
         const resetAt = rateLimitResetAt(response);
         if (resetAt > 0) {
-          const delay = retryDelayMs(resetAt);
-          error.value = `GitHub 接口限流（配额用尽），约 ${Math.ceil(delay / 1000)} 秒后自动重试`;
+          void storeSet(K_GH_RATE_LIMIT, { resetAt });
+          error.value = rateLimitMessage(resetAt, 'GitHub 接口限流（配额用尽）');
           retryTimer = setTimeout(() => {
             retryTimer = null;
             void refresh(true);
-          }, delay);
+          }, retryDelayMs(resetAt));
         } else {
           error.value = 'GitHub 接口限流，请稍后手动重试';
         }
@@ -577,7 +624,7 @@ export function useGithubProfile(username: Ref<string | null>, range: Ref<HeatRa
     if (ctrl.signal.aborted || version !== requestVersion) return;
     contributions.value = contrib;
 
-    // 资料获取成功才写缓存（404/限流/网络错误不缓存）
+    // 资料获取成功才写缓存（404/限流/网络错误不缓存），并清除限流标记
     if (profileResult.status === 'fulfilled' && profileResult.value.ok) {
       void storeSet(K_GH_PROFILE, {
         login,
@@ -586,6 +633,7 @@ export function useGithubProfile(username: Ref<string | null>, range: Ref<HeatRa
         activities: activities.value,
         contributions: contrib,
       });
+      void storeRemove(K_GH_RATE_LIMIT);
     }
   }
 

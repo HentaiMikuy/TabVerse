@@ -117,15 +117,15 @@ function showTip(event: MouseEvent, day: HeatCell | null) {
 function relativeTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '未知时间';
-  const seconds = Math.round((date.getTime() - Date.now()) / 1000);
-  const abs = Math.abs(seconds);
-  if (abs < 60) return '刚刚';
+  // 取绝对值：过去（正常）与未来（源站时钟偏差）的时间都显示为正数时长
+  const seconds = Math.abs(Math.round((date.getTime() - Date.now()) / 1000));
+  if (seconds < 60) return '刚刚';
   const minutes = Math.round(seconds / 60);
-  if (Math.abs(minutes) < 60) return `${minutes} 分钟前`;
+  if (minutes < 60) return `${minutes} 分钟前`;
   const hours = Math.round(minutes / 60);
-  if (Math.abs(hours) < 24) return `${hours} 小时前`;
+  if (hours < 24) return `${hours} 小时前`;
   const days = Math.round(hours / 24);
-  if (Math.abs(days) < 30) return `${days} 天前`;
+  if (days < 30) return `${days} 天前`;
   const months = Math.round(days / 30);
   return `${months} 个月前`;
 }

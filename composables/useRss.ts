@@ -20,7 +20,7 @@ export interface RssFeed {
 
 export const DEFAULT_FEEDS: RssFeed[] = [
   { id: 'hn', title: 'Hacker News', url: 'https://hnrss.org/best' },
-  { id: 'google-research', title: 'Google Research Blog', url: 'https://blog.research.google/feeds/posts/default?alt=rss' },
+  { id: 'google-research', title: 'Google Research Blog', url: 'https://research.google/blog/rss/' },
   { id: 'portswigger', title: 'PortSwigger Research', url: 'https://portswigger.net/research/rss' },
   { id: 'github-blog', title: 'GitHub Blog', url: 'https://github.blog/feed/' },
   { id: 'krebs', title: 'Krebs on Security', url: 'https://krebsonsecurity.com/feed/' },
@@ -47,8 +47,11 @@ function pickString(node: Element | null | undefined, tag: string): string {
 
 function itemFromAtom(entry: Element, fallbackTitle: string): RssItem | null {
   const title = entry.getElementsByTagName('title')[0]?.textContent?.trim() || '';
-  const linkEl = entry.getElementsByTagName('link')[0];
-  const href = linkEl?.getAttribute('href') || '';
+  // Blogger 等源会在条目里放多个 link：第一个常是 rel="replies" 的评论 feed，
+  // 必须优先取 rel="alternate" 的文章链接，否则点开的会是 XML 而不是文章页
+  const links = Array.from(entry.getElementsByTagName('link'));
+  const alt = links.find((l) => l.getAttribute('rel') === 'alternate');
+  const href = alt?.getAttribute('href') || links[0]?.getAttribute('href') || '';
   const summary = entry.getElementsByTagName('summary')[0]?.textContent?.trim() || '';
   const published = entry.getElementsByTagName('updated')[0]?.textContent?.trim() || '';
   const author = entry.getElementsByTagName('name')[0]?.textContent?.trim() || '';
@@ -202,7 +205,12 @@ export function useRss() {
     const stored = await storeGet<RssFeed[] | null>(K_RSS, null);
     if (Array.isArray(stored) && stored.length) {
       // 丢弃已停用/失效的旧默认源（用户自定义的保留）
-      const BROKEN = ['www.ruanyifeng.com', 'www.v2ex.com', 'news.ycombinator.com'];
+      const BROKEN = [
+        'www.ruanyifeng.com',
+        'www.v2ex.com',
+        'news.ycombinator.com',
+        'blog.research.google', // 旧源 302 到 feedburner 的 http 地址，浏览器里已无法直连，新源见 DEFAULT_FEEDS
+      ];
       const list = stored.filter((f) => !BROKEN.some((b) => f.url.includes(b)));
       if (!list.length) {
         feeds.value = DEFAULT_FEEDS.slice();
