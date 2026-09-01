@@ -1,4 +1,3 @@
-```markdown
 # TabVerse
 
 Chrome 新标签页信息聚合仪表盘
@@ -51,4 +50,3 @@ Chrome 新标签页信息聚合仪表盘
 - 不收集任何数据
 - 天气、图标走公开免费接口
 - 仅申请 `storage`、`bookmarks` 两个权限
-```
