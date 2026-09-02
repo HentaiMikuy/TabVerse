@@ -86,7 +86,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
 </script>
 
 <template>
-  <div class="subbar">
+  <div class="subbar" :class="{ 'is-wide': activeTab === 'github' }">
     <button
       class="icon-btn subbar-toggle"
       :title="subbarView === 'tabs' ? '显示快捷方式' : '显示页面标签'"

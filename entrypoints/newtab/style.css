@@ -227,9 +227,13 @@ body.dark-theme .icon-sun { display: none; }
 /* ---------- 快捷方式 pills ---------- */
 .subbar {
   width: 100%;
+  /* 与下方内容列（.cols 的 max-width）同宽居中，避免宽屏下按钮被甩到页面边缘 */
+  max-width: 1280px;
   height: 52px;
   display: flex; align-items: center; gap: 8px;
 }
+/* GitHub 标签内容为通栏（.gh-cols 无 max-width），副栏跟随其宽度对齐 */
+.subbar.is-wide { max-width: none; }
 .subbar-toggle { flex: none; width: 32px; height: 32px; }
 .subbar-toggle svg { width: 16px; height: 16px; }
 .links-pills {
