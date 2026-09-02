@@ -4,8 +4,8 @@ export default defineConfig({
   modules: ['@wxt-dev/module-vue'],
   manifest: {
     name: 'TabVerse',
-    version: '0.3.0',
-    description: '更聚合、更好用的新标签页：聚合搜索、快捷方式、天气、待办、浏览器书签。卡片式仪表盘。',
+    version: '0.4.0',
+    description: '更聚合、更好用的新标签页信息仪表盘：聚合搜索、快捷方式、天气、待办、书签，RSS 阅读与 GitHub 动态。',
     minimum_chrome_version: '100',
     chrome_url_overrides: {
       newtab: 'newtab.html',
