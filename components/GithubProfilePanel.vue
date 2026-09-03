@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useGithubProfile, type ContributionDay } from '../composables/useGithub';
 import { HEAT_RANGE_DAYS, formatCount, type HeatRange } from '../utils/common';
 import { useSettings } from '../composables/useSettings';
+import { useTabs } from '../composables/useTabs';
 import { K_GH_USER, storeGet, storeRemove, storeSet } from '../composables/useStorage';
 import { useToast } from '../composables/useToast';
 
@@ -96,12 +97,20 @@ const tip = ref<{ x: number; y: number; text: string } | null>(null);
 /** 热力图滚动容器：数据或范围变化后默认展示最新日期（滚到最右侧） */
 const heatScrollEl = ref<HTMLElement | null>(null);
 
-watch(heat, () => {
+/** 滚到最右（最新一周）；容器不可见时无布局尺寸，需等可见后再滚一次 */
+function scrollHeatToLatest() {
   nextTick(() => {
     const el = heatScrollEl.value;
     // 超出容器宽度时才有滚动；scrollLeft 超出上限会被自动钳制
     if (el) el.scrollLeft = el.scrollWidth;
   });
+}
+
+watch(heat, scrollHeatToLatest);
+// 数据常在 GitHub 标签隐藏（v-show）时就绪，切到该标签使容器可见后需重新定位
+const { activeTab } = useTabs();
+watch(activeTab, (tab) => {
+  if (tab === 'github') scrollHeatToLatest();
 });
 
 function showTip(event: MouseEvent, day: HeatCell | null) {
