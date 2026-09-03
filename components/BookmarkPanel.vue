@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { hostOf } from '../utils/common';
 import { useToast } from '../composables/useToast';
+import { K_BM_VIEW, storeGet, storeSet } from '../composables/useStorage';
 import SiteIcon from './SiteIcon.vue';
 
 interface BmNode {
@@ -31,7 +32,17 @@ const total = ref(0);
 const path = ref<string[]>([]); // 当前所在文件夹的 id 路径
 const shown = ref(0); // 当前目录/搜索结果已展示的条数
 const kw = ref('');
-const viewMode = ref<'dir' | 'split'>('dir'); // 浏览视图：目录钻取 / 双栏（左目录树 + 右书签）
+/** 视图偏好初始值：同步读 localStorage 避免首帧闪烁，挂载后再用同步存储校正 */
+function initialViewMode(): 'dir' | 'split' {
+  try {
+    const v = localStorage.getItem(K_BM_VIEW);
+    if (v === 'dir' || v === 'split') return v;
+  } catch {
+    /* 忽略 */
+  }
+  return 'dir';
+}
+const viewMode = ref<'dir' | 'split'>(initialViewMode());
 const expandedIds = ref<Set<string>>(new Set()); // 双栏视图左侧树的展开文件夹（默认展开顶层）
 const selectedId = ref<string>(''); // 双栏视图当前选中的文件夹
 
@@ -214,8 +225,15 @@ const footText = computed(() => {
 
 watch(kw, () => (shown.value = 0));
 watch(path, () => (shown.value = 0), { deep: true });
-watch(viewMode, () => {
+watch(viewMode, (v) => {
   shown.value = 0;
+  // 持久化视图偏好（localStorage 同步写供下次首帧直读，sync 存储跨设备）
+  try {
+    localStorage.setItem(K_BM_VIEW, v);
+  } catch {
+    /* 忽略 */
+  }
+  void storeSet(K_BM_VIEW, v);
   // 切到双栏时若还没有选中文件夹，默认选中第一个顶层文件夹
   if (viewMode.value === 'split' && !selectedId.value && tree.value.length) {
     selectFolder(tree.value[0].id);
@@ -254,7 +272,16 @@ async function loadBookmarks() {
   }
 }
 
-onMounted(loadBookmarks);
+/** 挂载后异步校正视图偏好：以 chrome.storage.sync（可跨设备同步）为准 */
+async function loadViewPref() {
+  const saved = await storeGet<'dir' | 'split' | null>(K_BM_VIEW, null);
+  if (saved === 'dir' || saved === 'split') viewMode.value = saved;
+}
+
+onMounted(() => {
+  void loadBookmarks();
+  void loadViewPref();
+});
 </script>
 
 <template>
