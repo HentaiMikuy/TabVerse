@@ -226,6 +226,7 @@ body.dark-theme .icon-sun { display: none; }
 
 /* ---------- 快捷方式 pills ---------- */
 .subbar {
+  position: relative; /* 切换动画中退场元素 absolute 的锚点，防止被锚到整页宽度 */
   width: 100%;
   /* 与下方内容列（.cols 的 max-width）同宽居中，避免宽屏下按钮被甩到页面边缘 */
   max-width: 1280px;
