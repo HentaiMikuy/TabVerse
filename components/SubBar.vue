@@ -211,22 +211,24 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
     </Transition>
   </div>
 
-  <!-- 添加/编辑快捷方式弹窗 -->
-  <div class="modal-backdrop" :class="{ hidden: !modalOpen }" @click="onModalBackdropClick">
-    <div class="modal">
-      <h3>{{ editingIndex >= 0 ? '编辑快捷方式' : '添加快捷方式' }}</h3>
-      <label class="field"
-        >名称
-        <input v-model="formName" type="text" placeholder="如：B站" autocomplete="off" @keydown.enter="saveModal" />
-      </label>
-      <label class="field"
-        >网址
-        <input ref="urlInput" v-model="formUrl" type="text" placeholder="https://…" autocomplete="off" @keydown.enter="saveModal" />
-      </label>
-      <div class="modal-actions">
-        <button class="text-btn" @click="closeModal">取消</button>
-        <button class="dark-btn" @click="saveModal">保存</button>
+  <!-- 添加/编辑快捷方式弹窗（挂到 body，避免被搜索区容器裁剪/错位） -->
+  <Teleport to="body">
+    <div class="modal-backdrop" :class="{ hidden: !modalOpen }" @click="onModalBackdropClick">
+      <div class="modal">
+        <h3>{{ editingIndex >= 0 ? '编辑快捷方式' : '添加快捷方式' }}</h3>
+        <label class="field"
+          >名称
+          <input v-model="formName" type="text" placeholder="如：B站" autocomplete="off" @keydown.enter="saveModal" />
+        </label>
+        <label class="field"
+          >网址
+          <input ref="urlInput" v-model="formUrl" type="text" placeholder="https://…" autocomplete="off" @keydown.enter="saveModal" />
+        </label>
+        <div class="modal-actions">
+          <button class="text-btn" @click="closeModal">取消</button>
+          <button class="dark-btn" @click="saveModal">保存</button>
+        </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>

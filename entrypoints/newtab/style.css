@@ -159,7 +159,8 @@ body.dark-theme .icon-sun { display: none; }
   flex: none;
   display: flex; flex-direction: column; align-items: center;
   gap: 14px;
-  animation: fadeUp 0.4s ease both;
+  /* 只做透明度渐变：fadeUp 的 transform 会被 fill-mode 保留，使固定定位的弹窗遮罩错位到搜索区内 */
+  animation: fadeIn 0.4s ease both;
 }
 .search-bar {
   position: relative;
