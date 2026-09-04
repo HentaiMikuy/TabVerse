@@ -1,6 +1,18 @@
-import { onUnmounted, readonly, ref, watch, type Ref } from 'vue';
+import { onUnmounted, reactive, readonly, ref, watch, type Ref } from 'vue';
 import { HEAT_RANGE_DAYS, type HeatRange } from '../utils/common';
-import { K_GH_PROFILE, K_GH_RATE_LIMIT, K_GH_REPOS, K_GH_SEARCH_RATE_LIMIT, storeGet, storeRemove, storeSet } from './useStorage';
+import {
+  K_GH_PROFILE,
+  K_GH_RATE_LIMIT,
+  K_GH_REPOS,
+  K_GH_SEARCH_RATE_LIMIT,
+  K_GH_TOKEN,
+  storeGet,
+  storeLocalGet,
+  storeLocalRemove,
+  storeLocalSet,
+  storeRemove,
+  storeSet,
+} from './useStorage';
 
 /* ---------------- GitHub 限流识别与缓存 ---------------- */
 
@@ -36,6 +48,135 @@ async function persistedRateLimitResetAt(key: string): Promise<number> {
 
 function rateLimitMessage(resetAt: number, label: string): string {
   return `${label}，约 ${Math.ceil(retryDelayMs(resetAt) / 1000)} 秒后自动重试`;
+}
+
+/* ---------------- GitHub OAuth（Device Flow）登录：未登录 60 次/时 → 登录后 5000 次/时 ---------------- */
+
+const ghToken = ref('');
+const ghLoginState = reactive({
+  status: 'idle' as 'idle' | 'waiting' | 'success' | 'error',
+  userCode: '', // 授权码
+  verificationUri: '', // 浏览器验证地址
+  errorMsg: '',
+});
+
+let pollingTimer: ReturnType<typeof setInterval> | null = null;
+let tokenLoaded: Promise<void> | null = null;
+
+function stopGithubLogin() {
+  if (pollingTimer !== null) {
+    clearInterval(pollingTimer);
+    pollingTimer = null;
+  }
+}
+
+async function loadGithubToken(): Promise<void> {
+  ghToken.value = (await storeLocalGet<string>(K_GH_TOKEN, '')) || '';
+}
+
+/** 请求前确保令牌已从存储读入（并发请求共享一次读取） */
+function ensureGithubToken(): Promise<void> {
+  if (!tokenLoaded) tokenLoaded = loadGithubToken();
+  return tokenLoaded;
+}
+
+function authHeaders(base: Record<string, string>): Record<string, string> {
+  return ghToken.value ? { ...base, Authorization: `Bearer ${ghToken.value}` } : base;
+}
+
+async function startGithubLogin(clientId: string) {
+  stopGithubLogin();
+  ghLoginState.status = 'idle';
+  ghLoginState.userCode = '';
+  ghLoginState.verificationUri = '';
+  ghLoginState.errorMsg = '';
+  const cid = clientId.trim();
+  if (!cid) {
+    ghLoginState.status = 'error';
+    ghLoginState.errorMsg = '请先在设置中填写 GitHub OAuth App 的 Client ID';
+    return;
+  }
+  try {
+    const res = await fetch('https://github.com/login/device/code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ client_id: cid, scope: '' }),
+    });
+    const data = (await res.json()) as {
+      device_code?: string;
+      user_code?: string;
+      verification_uri?: string;
+      expires_in?: number;
+      interval?: number;
+      error?: string;
+    };
+    if (!data.device_code || !data.user_code) {
+      throw new Error(data.error === 'incorrect_client_credentials' ? 'Client ID 无效' : '无法获取设备码');
+    }
+    ghLoginState.status = 'waiting';
+    ghLoginState.userCode = data.user_code;
+    ghLoginState.verificationUri = data.verification_uri || 'https://github.com/login/device';
+    const expireAt = Date.now() + (data.expires_in || 900) * 1000;
+    const intervalMs = Math.max(data.interval || 5, 5) * 1000;
+
+    pollingTimer = setInterval(async () => {
+      try {
+        const tr = await fetch('https://github.com/login/oauth/access_token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            client_id: cid,
+            device_code: data.device_code,
+            grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+          }),
+        });
+        const td = (await tr.json()) as { access_token?: string; error?: string };
+        if (td.access_token) {
+          stopGithubLogin();
+          ghToken.value = td.access_token;
+          ghLoginState.status = 'success';
+          void storeLocalSet(K_GH_TOKEN, td.access_token);
+          // 登录后配额提升，清除未登录时持久化的限流标记，避免仍按旧窗口拦截请求
+          void storeRemove(K_GH_RATE_LIMIT);
+          void storeRemove(K_GH_SEARCH_RATE_LIMIT);
+        } else if (td.error === 'authorization_pending' || td.error === 'slow_down') {
+          /* 继续轮询 */
+        } else {
+          stopGithubLogin();
+          ghLoginState.status = 'error';
+          ghLoginState.errorMsg =
+            td.error === 'access_denied' ? '已在浏览器中拒绝授权' : `授权失败（${td.error || '未知错误'}）`;
+        }
+      } catch {
+        /* 网络波动：下一轮继续 */
+      }
+      if (pollingTimer && Date.now() > expireAt) {
+        stopGithubLogin();
+        ghLoginState.status = 'error';
+        ghLoginState.errorMsg = '设备码已过期，请重新发起登录';
+      }
+    }, intervalMs);
+  } catch (err) {
+    ghLoginState.status = 'error';
+    ghLoginState.errorMsg = err instanceof Error ? err.message : '无法发起 GitHub 登录';
+  }
+}
+
+function cancelGithubLogin() {
+  stopGithubLogin();
+  ghLoginState.status = 'idle';
+  ghLoginState.userCode = '';
+  ghLoginState.verificationUri = '';
+  ghLoginState.errorMsg = '';
+}
+
+async function logoutGithub() {
+  cancelGithubLogin();
+  ghToken.value = '';
+  await storeLocalRemove(K_GH_TOKEN);
+  // 退出登录后回到未认证配额，旧限流标记才可能有效
+  void storeRemove(K_GH_RATE_LIMIT);
+  void storeRemove(K_GH_SEARCH_RATE_LIMIT);
 }
 
 /** 带超时的 fetch：超时或外部信号中止时以 AbortError 拒绝，避免请求挂起导致界面一直 loading */
@@ -168,6 +309,7 @@ export function useGithubRepos(language: Ref<string>, period: Ref<GithubPeriod>,
   }
 
   async function refresh(force = false) {
+    await ensureGithubToken();
     requestVersion++;
     const version = requestVersion;
     controller?.abort();
@@ -211,7 +353,7 @@ export function useGithubRepos(language: Ref<string>, period: Ref<GithubPeriod>,
     try {
       const response = await fetchWithTimeout(newRepositoriesApiUrl(language.value, period.value, sort.value), 10_000, {
         signal: ctrl.signal,
-        headers: { Accept: 'application/vnd.github+json' },
+        headers: authHeaders({ Accept: 'application/vnd.github+json' }),
       });
       if (ctrl.signal.aborted || version !== requestVersion) return;
       if (!response.ok) {
@@ -508,6 +650,7 @@ export function useGithubProfile(username: Ref<string | null>, range: Ref<HeatRa
   }
 
   async function refresh(force = false) {
+    await ensureGithubToken();
     const login = (username.value || '').trim();
     if (!login) return;
     requestVersion++;
@@ -547,7 +690,7 @@ export function useGithubProfile(username: Ref<string | null>, range: Ref<HeatRa
     loading.value = true;
     error.value = null;
 
-    const headers = { Accept: 'application/vnd.github+json' };
+    const headers = authHeaders({ Accept: 'application/vnd.github+json' });
     // 资料与动态是 loading 的关键路径：各自带 15s 超时，保证一定能结算、不会卡死
     const [profileResult, eventResult] = await Promise.allSettled([
       fetchWithTimeout(`https://api.github.com/users/${encodeURIComponent(login)}`, 15_000, {
@@ -663,5 +806,10 @@ export function useGithubProfile(username: Ref<string | null>, range: Ref<HeatRa
     error: readonly(error),
     refresh,
     reset,
+    ghToken: readonly(ghToken),
+    ghLogin: ghLoginState,
+    startGithubLogin,
+    cancelGithubLogin,
+    logoutGithub,
   };
 }

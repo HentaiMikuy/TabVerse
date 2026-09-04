@@ -4,7 +4,7 @@ import { useRss } from '../composables/useRss';
 import { useToast } from '../composables/useToast';
 import SiteIcon from './SiteIcon.vue';
 
-const { feeds, activeFeed, items, loading, error, refresh, selectFeed, addFeed, removeFeed, moveFeed } = useRss();
+const { feeds, activeFeed, items, loading, error, refresh, selectFeed, addFeed, removeFeed, moveFeed, isRead, markRead, markAllRead } = useRss();
 const { toast } = useToast();
 
 const addUrl = ref('');
@@ -230,7 +230,14 @@ async function onRemoveFeed(id: string) {
 
       <ul v-else class="rss-list">
         <li v-for="(item, idx) in items" :key="item.id">
-          <a :href="item.link" target="_blank" rel="noreferrer" class="rss-item">
+          <a
+            :href="item.link"
+            target="_blank"
+            rel="noreferrer"
+            class="rss-item"
+            :class="{ read: isRead(item.link) }"
+            @click="markRead(item.link)"
+          >
             <span class="rss-idx">{{ idx + 1 }}</span>
             <span class="rss-item-main">
               <span class="rss-item-title">{{ item.title }}</span>
@@ -247,6 +254,7 @@ async function onRemoveFeed(id: string) {
 
     <div class="gh-footer rss-footer">
       <span>已订阅 {{ feeds.length }} 个源 · 数据经公开代理读取</span>
+      <button v-if="items.length" class="text-btn" @click="markAllRead(items)">全部已读</button>
     </div>
   </section>
 </template>

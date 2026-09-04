@@ -11,6 +11,8 @@ export interface Settings {
   city: string;
   /** GitHub 贡献热力图时间范围：最近三个月 / 半年 / 一年 / 两年 / 全部 */
   ghHeatRange: HeatRange;
+  /** GitHub OAuth App 的 Client ID（公开值，用于 Device Flow 登录提升 API 配额） */
+  ghClientId: string;
 }
 
 /** 贡献热力图显示时间范围 */
@@ -29,6 +31,8 @@ export interface Todo {
   id: number;
   text: string;
   done: boolean;
+  due?: string; // 截止日期 YYYY-MM-DD（可选）
+  priority?: number; // 0=低 1=中 2=高（默认中）
 }
 
 export interface Engine {
@@ -61,6 +65,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'light',
   city: '',
   ghHeatRange: 'year',
+  ghClientId: '',
 };
 
 export const AVATAR_COLORS = ['#f97316', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];

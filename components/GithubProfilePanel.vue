@@ -13,9 +13,35 @@ const { settings } = useSettings();
 const username = ref('');
 const applied = ref<string | null>(null);
 const heatRange = computed<HeatRange>(() => settings.ghHeatRange);
-const { user, activities, contributions, loading, error, refresh, reset } = useGithubProfile(applied, heatRange);
+const { user, activities, contributions, loading, error, refresh, reset, ghToken, ghLogin, startGithubLogin, cancelGithubLogin, logoutGithub } =
+  useGithubProfile(applied, heatRange);
 
 const isRefreshing = computed(() => loading.value && !!user.value);
+
+function onLoginToggle() {
+  if (ghLogin.status === 'waiting') {
+    cancelGithubLogin();
+    return;
+  }
+  if (ghToken.value) {
+    void logoutGithub().then(() => refresh(true));
+    return;
+  }
+  void startGithubLogin(settings.ghClientId);
+}
+
+function copyUserCode() {
+  if (!ghLogin.userCode) return;
+  void navigator.clipboard.writeText(ghLogin.userCode).then(
+    () => toast('已复制授权码'),
+    () => toast('复制失败，请手动输入')
+  );
+}
+
+// 登录成功拿到令牌后，清掉旧缓存用新配额重新拉取
+watch(ghToken, (token) => {
+  if (token) void refresh(true);
+});
 
 const HEAT_RANGE_TEXT: Record<HeatRange, string> = {
   quarter: '最近三个月',
@@ -172,16 +198,33 @@ onMounted(async () => {
     <div class="card-head">
       <div class="head-text">
         <h2>GitHub Profile</h2>
-        <div class="card-sub">公开资料与最近动态 · 无需登录</div>
+        <div class="card-sub">公开资料与最近动态</div>
       </div>
-      <div v-if="applied" class="gh-controls">
-        <button class="icon-btn small" title="刷新（获取最新数据）" :disabled="loading" @click="refresh(true)">
+      <div class="gh-controls">
+        <button
+          class="text-btn gh-login-btn"
+          :title="ghToken ? '退出 GitHub 授权' : '登录后 API 配额提升至 5000 次/时'"
+          @click="onLoginToggle"
+        >
+          {{ ghToken ? '已登录 · 退出' : ghLogin.status === 'waiting' ? '等待授权…' : '登录 GitHub' }}
+        </button>
+        <button v-if="applied" class="icon-btn small" title="刷新（获取最新数据）" :disabled="loading" @click="refresh(true)">
           <svg :class="{ spinning: isRefreshing }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
           </svg>
         </button>
-        <button class="text-btn gh-unbind" title="清除已绑定的用户，回到初始状态" @click="unbind">解绑</button>
+        <button v-if="applied" class="text-btn gh-unbind" title="清除已绑定的用户，回到初始状态" @click="unbind">解绑</button>
       </div>
+    </div>
+
+    <!-- Device Flow 授权提示 -->
+    <div v-if="ghLogin.status === 'waiting'" class="gh-device-box">
+      <p class="gh-device-line">在浏览器打开 <b>{{ ghLogin.verificationUri }}</b> 并输入代码：</p>
+      <button class="gh-device-code" title="点击复制授权码" @click="copyUserCode">{{ ghLogin.userCode }}</button>
+      <p class="field-tip">确认授权后这里会自动完成登录；点击「等待授权…」可取消。</p>
+    </div>
+    <div v-else-if="ghLogin.status === 'error'" class="gh-device-box gh-device-err">
+      <p>{{ ghLogin.errorMsg }}</p>
     </div>
 
     <div v-if="!applied" class="field-row gh-user-row">

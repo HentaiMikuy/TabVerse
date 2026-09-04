@@ -1,5 +1,5 @@
-import { onMounted, readonly, ref, type Ref } from 'vue';
-import { K_RSS, K_RSS_REMOVED, storeGet, storeSet } from './useStorage';
+import { onMounted, reactive, readonly, ref, type Ref } from 'vue';
+import { K_RSS, K_RSS_READ, K_RSS_REMOVED, storeGet, storeLocalGet, storeLocalSet, storeSet } from './useStorage';
 
 /* ---------------- RSS 订阅（无需后端，直接用浏览器 fetch 解析 XML/Atom） ---------------- */
 
@@ -166,6 +166,47 @@ const FRESH_MS = 5 * 60 * 1000; // 5 分钟内不重复拉取
 /** 在内存里缓存每个源最近一次解析结果，避免重复往返、切回时秒显 */
 const memoryCache = new Map<string, { title: string; items: RssItem[] }>();
 
+/* ---------------- 已读标记（reactive Set：存 chrome.storage.local，超量淘汰最早标记） ---------------- */
+
+const RSS_READ_MAX = 5000;
+const readLinks = reactive(new Set<string>());
+
+async function loadReadLinks() {
+  const list = await storeLocalGet<string[]>(K_RSS_READ, []);
+  for (const l of list) readLinks.add(l);
+}
+
+function persistReadLinks() {
+  while (readLinks.size > RSS_READ_MAX) {
+    const oldest = readLinks.values().next().value;
+    if (oldest === undefined) break;
+    readLinks.delete(oldest);
+  }
+  void storeLocalSet(K_RSS_READ, [...readLinks]);
+}
+
+/** 文章是否已读（readLinks 为 reactive Set，模板调用可触发更新） */
+function isRead(link: string): boolean {
+  return !!link && readLinks.has(link);
+}
+
+function markRead(link: string) {
+  if (!link || readLinks.has(link)) return;
+  readLinks.add(link);
+  persistReadLinks();
+}
+
+function markAllRead(items: readonly RssItem[]) {
+  let changed = false;
+  for (const it of items) {
+    if (it.link && !readLinks.has(it.link)) {
+      readLinks.add(it.link);
+      changed = true;
+    }
+  }
+  if (changed) persistReadLinks();
+}
+
 export function useRss() {
   const feeds = ref<RssFeed[]>([]);
   const activeFeedId = ref<string>('');
@@ -198,6 +239,7 @@ export function useRss() {
   }
 
   async function loadFeeds() {
+    await loadReadLinks();
     await loadPersistedCache();
     // 用户主动删除过的默认源 URL，迁移补源时不再加回
     const removedSet = new Set((await storeGet<string[]>(K_RSS_REMOVED, [])) || []);
@@ -393,5 +435,8 @@ export function useRss() {
     removeFeed,
     moveFeed,
     resetError,
+    isRead,
+    markRead,
+    markAllRead,
   };
 }

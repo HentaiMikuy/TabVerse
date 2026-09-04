@@ -11,6 +11,7 @@ interface BmNode {
   url?: string;
   children?: BmNode[];
   bookmarkCount: number;
+  addedAt?: number; // 书签的添加时间（ms），供「最近添加」排序
 }
 
 const BOOKMARK_PAGE = 60;
@@ -45,6 +46,7 @@ function initialViewMode(): 'dir' | 'split' {
 const viewMode = ref<'dir' | 'split'>(initialViewMode());
 const expandedIds = ref<Set<string>>(new Set()); // 双栏视图左侧树的展开文件夹（默认展开顶层）
 const selectedId = ref<string>(''); // 双栏视图当前选中的文件夹
+const sortMode = ref<'default' | 'recent'>('default'); // 右栏书签排序：默认树序 / 最近添加
 
 const hasApi = typeof chrome !== 'undefined' && !!chrome.bookmarks?.getTree;
 
@@ -52,7 +54,7 @@ function normalizeNodes(nodes: chrome.bookmarks.BookmarkTreeNode[]): BmNode[] {
   const out: BmNode[] = [];
   for (const n of nodes || []) {
     if (n.url) {
-      out.push({ id: String(n.id), title: n.title || '', url: n.url, bookmarkCount: 1 });
+      out.push({ id: String(n.id), title: n.title || '', url: n.url, bookmarkCount: 1, addedAt: n.dateAdded || 0 });
       continue;
     }
     if (!n.children) continue;
@@ -184,13 +186,17 @@ const treeRows = computed(() => {
 const selectedFolder = computed<BmNode | null>(() =>
   selectedId.value ? findFolder(tree.value, selectedId.value) : null
 );
-/** 右侧内容：选中文件夹的直接子级，文件夹在前、书签在后 */
+/** 右侧内容：选中文件夹的直接子级，文件夹在前、书签在后；「最近添加」时书签按时间倒序 */
 const paneRows = computed<PaneRow[]>(() => {
   const kids = selectedFolder.value?.children || [];
+  const links = kids.filter((n) => n.url);
+  if (sortMode.value === 'recent') {
+    links.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+  }
   return kids
     .filter((n) => !n.url)
     .map((n): PaneRow => ({ kind: 'folder', node: n }))
-    .concat(kids.filter((n) => n.url).map((n): PaneRow => ({ kind: 'link', node: n })));
+    .concat(links.map((n): PaneRow => ({ kind: 'link', node: n })));
 });
 const visiblePaneRows = computed(() => paneRows.value.slice(0, limit.value));
 
@@ -357,6 +363,10 @@ onMounted(() => {
       <div class="bm-split-pane">
         <div class="bm-split-head">
           <span class="bm-split-title">{{ selectedFolder?.title || '全部书签' }}</span>
+          <select v-model="sortMode" class="bm-sort" aria-label="书签排序方式">
+            <option value="default">默认排序</option>
+            <option value="recent">最近添加</option>
+          </select>
           <span class="bm-split-count">{{ selectedFolder ? selectedFolder.bookmarkCount : total }} 条书签</span>
         </div>
         <ul class="bm-split-list">

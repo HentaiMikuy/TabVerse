@@ -1,12 +1,71 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
-import { ENGINES } from '../utils/common';
+import { debounce, ENGINES } from '../utils/common';
 import { useSettings } from '../composables/useSettings';
 
 const { settings } = useSettings();
 const q = ref('');
 const menuOpen = ref(false);
 const inputEl = ref<HTMLInputElement>();
+
+/* 搜索建议：输入时从 DuckDuckGo Ac 接口联想（失败/受限时静默降级为无建议） */
+const suggestions = ref<string[]>([]);
+const activeSug = ref(-1);
+const sugOpen = ref(false);
+const sugCache = new Map<string, string[]>(); // 最近查询的前缀缓存，防止来回打词重复请求
+let version = 0; // 竞态保护：只采纳最后一次查询的结果
+
+async function fetchSuggestions(kw: string) {
+  const v = ++version;
+  try {
+    const r = await fetch(`https://duckduckgo.com/ac/?q=${encodeURIComponent(kw)}&type=list&kl=cn-zh`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!r.ok) return;
+    const data = (await r.json()) as string[];
+    if (v !== version) return;
+    const list = (Array.isArray(data) ? data : []).filter((s) => typeof s === 'string' && s);
+    suggestions.value = list.slice(0, 6);
+    sugOpen.value = suggestions.value.length > 0;
+    activeSug.value = -1;
+    if (list.length) sugCache.set(kw, list.slice(0, 6));
+    if (sugCache.size > 60) sugCache.delete(sugCache.keys().next().value!);
+  } catch {
+    /* 网络受限：无建议 */
+  }
+}
+
+const onInput = debounce((kw: string) => {
+  if (!kw.trim()) {
+    suggestions.value = [];
+    sugOpen.value = false;
+    return;
+  }
+  const cached = sugCache.get(kw);
+  if (cached) {
+    suggestions.value = cached;
+    sugOpen.value = true;
+    return;
+  }
+  void fetchSuggestions(kw);
+}, 200);
+
+function pickSuggestion(s: string) {
+  sugOpen.value = false;
+  q.value = s;
+  doSearch();
+}
+
+function onSugKeydown(e: KeyboardEvent) {
+  if (!sugOpen.value || !suggestions.value.length) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const n = suggestions.value.length;
+    activeSug.value = (activeSug.value + (e.key === 'ArrowDown' ? 1 : -1) + n) % n;
+  } else if (e.key === 'Escape') {
+    sugOpen.value = false;
+  }
+}
 
 const engine = computed(() => ENGINES.find((e) => e.id === settings.engineId) || ENGINES[0]);
 
@@ -17,8 +76,13 @@ function pickEngine(id: string) {
 }
 
 function doSearch() {
-  const query = q.value.trim();
+  sugOpen.value = false;
+  let query = q.value.trim();
   if (!query) return;
+  if (activeSug.value >= 0 && suggestions.value[activeSug.value]) {
+    query = suggestions.value[activeSug.value];
+    q.value = query;
+  }
   const looksLikeUrl =
     /^https?:\/\//i.test(query) || (/^[\w-]+(\.[\w-]+)+([/?#].*)?$/.test(query) && !/\s/.test(query));
   if (looksLikeUrl) {
@@ -42,6 +106,9 @@ function onDocKeydown(e: KeyboardEvent) {
 function onDocClick(e: MouseEvent) {
   if (menuOpen.value && !(e.target as Element).closest('.engine-menu')) {
     menuOpen.value = false;
+  }
+  if (sugOpen.value && !(e.target as Element).closest('.search-sug')) {
+    sugOpen.value = false;
   }
 }
 
@@ -70,7 +137,9 @@ onBeforeUnmount(() => {
       placeholder="搜索或输入网址"
       autocomplete="off"
       spellcheck="false"
+      @input="onInput(q)"
       @keydown.enter="doSearch"
+      @keydown="onSugKeydown"
     />
     <button class="engine-btn" title="切换搜索引擎" @click.stop="menuOpen = !menuOpen">
       <span>{{ engine.name }}</span>
@@ -95,5 +164,21 @@ onBeforeUnmount(() => {
         <path d="M5 12h14M13 6l6 6-6 6" />
       </svg>
     </button>
+
+    <!-- 搜索建议下拉 -->
+    <div v-if="sugOpen" class="search-sug">
+      <button
+        v-for="(s, i) in suggestions"
+        :key="s"
+        :class="{ active: i === activeSug }"
+        @mousedown.prevent="pickSuggestion(s)"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+        <span>{{ s }}</span>
+      </button>
+    </div>
   </div>
 </template>
