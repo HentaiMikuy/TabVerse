@@ -5,6 +5,9 @@ export interface QuickLink {
   url: string;
 }
 
+/** 自定义背景类型：无 / 图片 / 视频 */
+export type BgType = 'none' | 'image' | 'video';
+
 export interface Settings {
   engineId: string;
   theme: 'light' | 'dark';
@@ -13,6 +16,12 @@ export interface Settings {
   ghHeatRange: HeatRange;
   /** GitHub OAuth App 的 Client ID（公开值，用于 Device Flow 登录提升 API 配额） */
   ghClientId: string;
+  /** 简约模式：仅显示时间日期与搜索框 */
+  minimal: boolean;
+  /** 自定义背景类型（背景地址存 chrome.storage.local，见 useBackground） */
+  bgType: BgType;
+  /** 背景遮罩不透明度 0~1，保证前景文字可读 */
+  bgScrim: number;
 }
 
 /** 贡献热力图显示时间范围 */
@@ -66,6 +75,9 @@ export const DEFAULT_SETTINGS: Settings = {
   city: '',
   ghHeatRange: 'year',
   ghClientId: '',
+  minimal: false,
+  bgType: 'none',
+  bgScrim: 0.35,
 };
 
 export const AVATAR_COLORS = ['#f97316', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];

@@ -1,39 +1,27 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive } from 'vue';
-import { WEEKDAYS } from '../utils/common';
+import { onMounted } from 'vue';
 import { useSettings } from '../composables/useSettings';
 import { useWeather } from '../composables/useWeather';
+import { useClock } from '../composables/useClock';
 
 defineEmits<{ (e: 'open-settings'): void }>();
 
 const { settings, ready: settingsReady } = useSettings();
 const { weather, loadWeather } = useWeather();
-
-const clock = reactive({ time: '--:--', sec: '00', date: '--', greeting: '你好' });
-
-function tick() {
-  const now = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  clock.time = `${p(now.getHours())}:${p(now.getMinutes())}`;
-  clock.sec = p(now.getSeconds());
-  clock.date = `${now.getMonth() + 1}月${now.getDate()}日 星期${WEEKDAYS[now.getDay()]}`;
-  const h = now.getHours();
-  clock.greeting =
-    h < 5 ? '夜深了，注意休息 🌃' : h < 11 ? '早上好 ☀️' : h < 13 ? '中午好 🍚' : h < 18 ? '下午好 🌤️' : '晚上好 🌙';
-}
+const clock = useClock();
 
 function toggleTheme() {
   settings.theme = settings.theme === 'dark' ? 'light' : 'dark';
 }
 
-let timer: ReturnType<typeof setInterval> | undefined;
+function toggleMinimal() {
+  settings.minimal = !settings.minimal;
+}
+
 onMounted(() => {
-  tick();
-  timer = setInterval(tick, 1000);
   // 等待设置从存储加载完成（含已保存的城市），避免竞态导致按默认城市/自动定位展示
   void settingsReady.then(() => loadWeather(false));
 });
-onUnmounted(() => clearInterval(timer));
 </script>
 
 <template>
@@ -69,6 +57,14 @@ onUnmounted(() => clearInterval(timer));
     </div>
 
     <div class="top-actions">
+      <button class="icon-btn" title="简约模式" @click="toggleMinimal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 14 10 14 10 20" />
+          <polyline points="20 10 14 10 14 4" />
+          <line x1="14" x2="21" y1="10" y2="3" />
+          <line x1="3" x2="10" y1="21" y2="14" />
+        </svg>
+      </button>
       <button class="icon-btn" title="切换深浅色" @click="toggleTheme">
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="4" />

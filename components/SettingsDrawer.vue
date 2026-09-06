@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS } from '../utils/common';
 import { useSettings } from '../composables/useSettings';
 import { useToast } from '../composables/useToast';
 import { useWeather } from '../composables/useWeather';
+import { useBackground } from '../composables/useBackground';
 import { K_LINKS, K_RSS, K_RSS_REMOVED, K_SETTINGS, K_TODOS, storeGet, storeSet } from '../composables/useStorage';
 
 const props = defineProps<{ open: boolean }>();
@@ -12,14 +13,23 @@ const emit = defineEmits<{ (e: 'close'): void }>();
 const { settings } = useSettings();
 const { toast } = useToast();
 const { loadWeather } = useWeather();
+const { bgUrl, setBgUrl } = useBackground();
 
 const cityInput = ref('');
 const fileInput = ref<HTMLInputElement>();
+const bgFileInput = ref<HTMLInputElement>();
+const bgUrlInput = ref('');
+
+/** 背景本地文件建议上限：超出时 chrome.storage.local 写入可能很慢，但允许尝试 */
+const BG_FILE_WARN = 15 * 1024 * 1024;
 
 watch(
   () => props.open,
   (open) => {
-    if (open) cityInput.value = settings.city || '';
+    if (open) {
+      cityInput.value = settings.city || '';
+      bgUrlInput.value = bgUrl.value;
+    }
   }
 );
 
@@ -29,6 +39,50 @@ function applyCity() {
   emit('close');
   toast(city ? `天气城市已设为「${city}」` : '已恢复自动定位');
   loadWeather(true);
+}
+
+/* ---------- 简约模式与自定义背景 ---------- */
+
+function pickBgType(type: 'none' | 'image' | 'video') {
+  settings.bgType = type;
+  if (type === 'none') {
+    void setBgUrl('');
+    toast('已关闭自定义背景');
+  }
+}
+
+async function applyBgUrl() {
+  const url = bgUrlInput.value.trim();
+  if (!url) return;
+  if (!/^(https?:\/\/|data:)/i.test(url)) {
+    toast('背景地址需以 http(s):// 开头');
+    return;
+  }
+  const ok = await setBgUrl(url);
+  toast(ok ? '背景已保存' : '背景保存失败：内容过大');
+}
+
+function onPickBgFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  if (file.size > BG_FILE_WARN) toast('文件较大，保存可能需要一些时间');
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const ok = await setBgUrl(String(reader.result));
+    toast(ok ? '背景已保存' : '背景保存失败：内容过大');
+  };
+  reader.readAsDataURL(file);
+  (e.target as HTMLInputElement).value = '';
+}
+
+async function clearBg() {
+  const ok = await setBgUrl('');
+  bgUrlInput.value = '';
+  toast(ok ? '已清除背景' : '清除失败，请重试');
+}
+
+function onBgKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter') void applyBgUrl();
 }
 
 /* ---------- 数据导出 / 导入 ---------- */
@@ -113,7 +167,90 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
     </div>
     <div class="drawer-body">
       <h3>外观</h3>
-      <p class="field-tip">深色 / 浅色模式可点击右上角的太阳或月亮图标切换。</p>
+      <div class="field-row">
+        <button
+          class="seg-btn"
+          :class="{ active: settings.theme === 'light' }"
+          @click="settings.theme = 'light'"
+        >
+          浅色
+        </button>
+        <button
+          class="seg-btn"
+          :class="{ active: settings.theme === 'dark' }"
+          @click="settings.theme = 'dark'"
+        >
+          深色
+        </button>
+      </div>
+
+      <div class="switch-row">
+        <span class="switch-label">简约模式</span>
+        <label class="switch" title="仅显示时间日期与搜索框">
+          <input v-model="settings.minimal" type="checkbox" />
+          <span class="track"></span>
+        </label>
+      </div>
+      <p class="field-tip">开启后只显示时间日期与搜索框，隐藏所有面板，点击右上角齿轮可随时退出。</p>
+
+      <h3>自定义背景</h3>
+      <div class="field-row">
+        <button class="seg-btn" :class="{ active: settings.bgType === 'none' }" @click="pickBgType('none')">
+          无
+        </button>
+        <button class="seg-btn" :class="{ active: settings.bgType === 'image' }" @click="pickBgType('image')">
+          图片
+        </button>
+        <button class="seg-btn" :class="{ active: settings.bgType === 'video' }" @click="pickBgType('video')">
+          视频
+        </button>
+      </div>
+
+      <template v-if="settings.bgType !== 'none'">
+        <div class="field-row">
+          <button class="data-btn" @click="bgFileInput?.click()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" x2="12" y1="3" y2="15" />
+            </svg>
+            {{ settings.bgType === 'image' ? '选择图片文件' : '选择视频文件' }}
+          </button>
+          <button class="data-btn" @click="clearBg">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            </svg>
+            清除背景
+          </button>
+        </div>
+        <input ref="bgFileInput" type="file" :accept="settings.bgType === 'image' ? 'image/*' : 'video/*'" class="hidden-input" @change="onPickBgFile" />
+
+        <div class="field-row bg-url-row">
+          <input
+            v-model="bgUrlInput"
+            type="text"
+            :placeholder="settings.bgType === 'image' ? '或粘贴图片 URL' : '或粘贴视频 URL'"
+            autocomplete="off"
+            spellcheck="false"
+            @keydown.enter="onBgKeydown"
+          />
+          <button class="dark-btn bg-apply" @click="applyBgUrl">应用</button>
+        </div>
+
+        <div v-if="bgUrl" class="bg-preview">
+          <img v-if="settings.bgType === 'image'" :src="bgUrl" alt="背景预览" />
+          <video v-else :src="bgUrl" muted playsinline preload="metadata" loop></video>
+        </div>
+
+        <div class="range-row">
+          <span class="range-label">遮罩</span>
+          <input v-model.number="settings.bgScrim" type="range" min="0" max="1" step="0.05" />
+          <span class="range-val">{{ Math.round(settings.bgScrim * 100) }}%</span>
+        </div>
+        <p class="field-tip">
+          遮罩用于保证前景文字可读性；视频建议使用网络 URL，本地大文件可能超出存储配额。
+        </p>
+      </template>
 
       <h3>天气城市</h3>
       <div class="field-row">
@@ -165,7 +302,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
       <p class="field-tip">导出内容含设置、快捷方式、RSS 订阅与待办，可在其他浏览器中导入恢复。</p>
 
       <h3>关于</h3>
-      <p class="about">TabVerse v0.4.0 · 信息聚合新标签页<br />聚合搜索 / 快捷方式 / 天气 / 待办 / 浏览器书签，数据仅保存在本地浏览器中。</p>
+      <p class="about">TabVerse v0.5.0 · 信息聚合新标签页<br />聚合搜索 / 快捷方式 / 天气 / 待办 / 浏览器书签，数据仅保存在本地浏览器中。</p>
     </div>
   </aside>
 </template>

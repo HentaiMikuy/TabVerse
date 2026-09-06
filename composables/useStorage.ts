@@ -18,6 +18,7 @@ export const K_GH_TOKEN = 'tv_gh_token'; // GitHub OAuth 访问令牌（存 chro
 export const K_RSS = 'tv_rss';
 export const K_RSS_CACHE = 'tv_rss_cache';
 export const K_RSS_REMOVED = 'tv_rss_removed'; // 用户主动删除过的默认源 URL
+export const K_BG_URL = 'tv_bg_url'; // 自定义背景地址（存 chrome.storage.local，图片/视频可能很大）
 
 const hasChromeStorage = typeof chrome !== 'undefined' && !!chrome.storage?.sync;
 
@@ -118,5 +119,23 @@ export async function storeLocalRemove(key: string): Promise<void> {
     localStorage.removeItem(key);
   } catch {
     /* 忽略 */
+  }
+}
+
+/** 写入 chrome.storage.local 并返回是否成功（背景等大文件配额不足时能提示用户） */
+export async function storeLocalSetReport(key: string, val: unknown): Promise<boolean> {
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    try {
+      await chrome.storage.local.set({ [key]: val });
+      return true;
+    } catch {
+      /* 落到 localStorage */
+    }
+  }
+  try {
+    localStorage.setItem(key, JSON.stringify(val));
+    return true;
+  } catch {
+    return false;
   }
 }
