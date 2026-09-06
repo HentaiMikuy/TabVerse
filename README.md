@@ -1,5 +1,7 @@
 # TabVerse
 
+[English](./README.en.md)
+
 Chrome 新标签页信息聚合仪表盘
 
 一个让 Chrome 新标签页更好用、信息更聚合的浏览器扩展。
