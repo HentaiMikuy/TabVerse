@@ -1,5 +1,6 @@
 import { onUnmounted, reactive, readonly, ref, watch, type Ref } from 'vue';
 import { HEAT_RANGE_DAYS, type HeatRange } from '../utils/common';
+import { useI18n } from '../utils/i18n';
 import {
   K_GH_PROFILE,
   K_GH_RATE_LIMIT,
@@ -47,7 +48,8 @@ async function persistedRateLimitResetAt(key: string): Promise<number> {
 }
 
 function rateLimitMessage(resetAt: number, label: string): string {
-  return `${label}，约 ${Math.ceil(retryDelayMs(resetAt) / 1000)} 秒后自动重试`;
+  const { t } = useI18n();
+  return t('gh.err.rateRetry', { label, n: Math.ceil(retryDelayMs(resetAt) / 1000) });
 }
 
 /* ---------------- GitHub OAuth（Device Flow）登录：未登录 60 次/时 → 登录后 5000 次/时 ---------------- */
@@ -85,6 +87,7 @@ function authHeaders(base: Record<string, string>): Record<string, string> {
 }
 
 async function startGithubLogin(clientId: string) {
+  const { t } = useI18n();
   stopGithubLogin();
   ghLoginState.status = 'idle';
   ghLoginState.userCode = '';
@@ -93,7 +96,7 @@ async function startGithubLogin(clientId: string) {
   const cid = clientId.trim();
   if (!cid) {
     ghLoginState.status = 'error';
-    ghLoginState.errorMsg = '请先在设置中填写 GitHub OAuth App 的 Client ID';
+    ghLoginState.errorMsg = t('gh.err.needClientId');
     return;
   }
   try {
@@ -111,7 +114,7 @@ async function startGithubLogin(clientId: string) {
       error?: string;
     };
     if (!data.device_code || !data.user_code) {
-      throw new Error(data.error === 'incorrect_client_credentials' ? 'Client ID 无效' : '无法获取设备码');
+      throw new Error(data.error === 'incorrect_client_credentials' ? t('gh.err.badClientId') : t('gh.err.noDeviceCode'));
     }
     ghLoginState.status = 'waiting';
     ghLoginState.userCode = data.user_code;
@@ -145,7 +148,7 @@ async function startGithubLogin(clientId: string) {
           stopGithubLogin();
           ghLoginState.status = 'error';
           ghLoginState.errorMsg =
-            td.error === 'access_denied' ? '已在浏览器中拒绝授权' : `授权失败（${td.error || '未知错误'}）`;
+            td.error === 'access_denied' ? t('gh.err.denied') : t('gh.err.authFailed', { err: td.error || 'unknown' });
         }
       } catch {
         /* 网络波动：下一轮继续 */
@@ -153,12 +156,12 @@ async function startGithubLogin(clientId: string) {
       if (pollingTimer && Date.now() > expireAt) {
         stopGithubLogin();
         ghLoginState.status = 'error';
-        ghLoginState.errorMsg = '设备码已过期，请重新发起登录';
+        ghLoginState.errorMsg = t('gh.err.expired');
       }
     }, intervalMs);
   } catch (err) {
     ghLoginState.status = 'error';
-    ghLoginState.errorMsg = err instanceof Error ? err.message : '无法发起 GitHub 登录';
+    ghLoginState.errorMsg = err instanceof Error ? err.message : t('gh.err.startFailed');
   }
 }
 
@@ -229,7 +232,7 @@ const LANGUAGE_COLORS: Record<string, string> = {
 };
 
 export const GITHUB_LANGUAGES = [
-  '全部语言', 'TypeScript', 'JavaScript', 'Python', 'Java', 'Go', 'Rust', 'Ruby',
+  'all', 'TypeScript', 'JavaScript', 'Python', 'Java', 'Go', 'Rust', 'Ruby',
   'C++', 'C', 'C#', 'Swift', 'Kotlin', 'Dart', 'PHP', 'Vue', 'HTML', 'CSS', 'Shell',
   'Lua', 'Zig', 'Svelte', 'Elixir', 'Haskell', 'Clojure', 'Scala', 'R',
   'Objective-C', 'Assembly', 'Julia', 'Nim', 'OCaml',
@@ -245,12 +248,12 @@ function languageSlug(language: string): string {
 }
 
 export function githubTrendingPageUrl(language: string, period: GithubPeriod): string {
-  const langPath = language && language !== '全部语言' ? `/${languageSlug(language)}` : '';
+  const langPath = language && language !== 'all' ? `/${languageSlug(language)}` : '';
   return `https://github.com/trending${langPath}?since=${period}`;
 }
 
 function newRepositoryQuery(language: string, period: GithubPeriod, sort: GithubSort): string {
-  const langQuery = language && language !== '全部语言' ? ` language:"${language}"` : '';
+  const langQuery = language && language !== 'all' ? ` language:"${language}"` : '';
   if (sort === 'popular') {
     // 历史热门：按 Star 排序 + 最低 Star 阈值
     return `stars:>1000 archived:false${langQuery}`;
@@ -309,6 +312,7 @@ export function useGithubRepos(language: Ref<string>, period: Ref<GithubPeriod>,
   }
 
   async function refresh(force = false) {
+    const { t } = useI18n();
     await ensureGithubToken();
     requestVersion++;
     const version = requestVersion;
@@ -336,7 +340,7 @@ export function useGithubRepos(language: Ref<string>, period: Ref<GithubPeriod>,
       const resetAt = await persistedRateLimitResetAt(K_GH_SEARCH_RATE_LIMIT);
       if (resetAt > 0) {
         loading.value = false;
-        error.value = rateLimitMessage(resetAt, 'GitHub 搜索接口限流（10 次/分钟）');
+        error.value = rateLimitMessage(resetAt, t('gh.err.rateLimitSearch'));
         retryTimer = setTimeout(() => {
           retryTimer = null;
           void refresh(true);
@@ -361,21 +365,21 @@ export function useGithubRepos(language: Ref<string>, period: Ref<GithubPeriod>,
           const resetAt = rateLimitResetAt(response);
           if (resetAt > 0) {
             void storeSet(K_GH_SEARCH_RATE_LIMIT, { resetAt });
-            error.value = rateLimitMessage(resetAt, 'GitHub 搜索接口限流（10 次/分钟）');
+            error.value = rateLimitMessage(resetAt, t('gh.err.rateLimitSearch'));
             retryTimer = setTimeout(() => {
               retryTimer = null;
               void refresh(true);
             }, retryDelayMs(resetAt));
           } else {
-            error.value = 'GitHub 搜索接口限流，请稍后重试';
+            error.value = t('gh.err.searchLimited');
           }
         } else {
-          throw new Error(`GitHub 搜索失败（HTTP ${response.status}）`);
+          throw new Error(t('gh.err.searchFailed', { n: response.status }));
         }
         return;
       }
       const payload: { items?: SearchRepoItem[] } = await response.json().catch(() => ({}));
-      if (!Array.isArray(payload.items)) throw new Error('GitHub 返回了无法解析的数据');
+      if (!Array.isArray(payload.items)) throw new Error(t('gh.err.badData'));
       repos.value = payload.items.map(mapRepo);
       void storeSet(K_GH_REPOS, { key: cacheKey, fetchedAt: Date.now(), repos: repos.value });
       void storeRemove(K_GH_SEARCH_RATE_LIMIT);
@@ -384,10 +388,10 @@ export function useGithubRepos(language: Ref<string>, period: Ref<GithubPeriod>,
       // 内部超时中止（AbortError 但外部 signal 未中止）
       error.value =
         err instanceof DOMException && err.name === 'AbortError'
-          ? '请求超时，请稍后重试'
+          ? t('gh.err.timeout')
           : err instanceof Error
             ? err.message
-            : '无法加载仓库列表';
+            : t('gh.err.loadRepos');
     } finally {
       if (version === requestVersion && !ctrl.signal.aborted) {
         loading.value = false;
@@ -558,14 +562,14 @@ function asNumber(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
-function activityLabel(type: string): string {
-  const labels: Record<string, string> = {
-    PushEvent: '推送了代码', PullRequestEvent: '提交了 Pull Request', IssuesEvent: '操作了 Issue',
-    IssueCommentEvent: '评论了 Issue', WatchEvent: 'Star 了', ForkEvent: 'Fork 了',
-    CreateEvent: '创建了', ReleaseEvent: '发布了 Release', DeleteEvent: '删除了',
-    PublicEvent: '开源了', GollumEvent: '编辑了 Wiki',
+function activityTypeKey(type: string): string {
+  const keys: Record<string, string> = {
+    PushEvent: 'push', PullRequestEvent: 'pr', IssuesEvent: 'issue',
+    IssueCommentEvent: 'comment', WatchEvent: 'watch', ForkEvent: 'fork',
+    CreateEvent: 'create', ReleaseEvent: 'release', DeleteEvent: 'delete',
+    PublicEvent: 'public', GollumEvent: 'wiki',
   };
-  return labels[type] || '有动态';
+  return keys[type] || 'other';
 }
 
 function mapActivity(event: {
@@ -575,10 +579,12 @@ function mapActivity(event: {
   payload?: Record<string, unknown>;
   created_at: string;
 }): GithubActivity {
+  const { t } = useI18n();
   const payload = event.payload || {};
   const repoName = event.repo?.name || 'GitHub';
   const repoUrl = `https://github.com/${repoName}`;
-  let action = `在 ${repoName} ${activityLabel(event.type)}`;
+  const typeKey = activityTypeKey(event.type);
+  let action = t('gh.act.base', { repo: repoName, label: t('gh.act.type.' + typeKey) });
   let subject = repoName;
   let url = repoUrl;
 
@@ -587,36 +593,36 @@ function mapActivity(event: {
     const count = asNumber(payload.size) || commits.length;
     const first = (commits[0] as Record<string, unknown> | undefined) || {};
     const branch = asString(payload.ref).replace('refs/heads/', '');
-    action = `推送了 ${count || 1} 次提交到 ${repoName}`;
+    action = t('gh.act.push', { n: count || 1, repo: repoName });
     subject = asString(first.message) || branch || repoName;
     url = `${repoUrl}/commits`;
   } else if (event.type === 'PullRequestEvent') {
     const pr = (payload.pull_request as Record<string, unknown> | undefined) || {};
-    action = `在 ${repoName} 提交了 Pull Request`;
+    action = t('gh.act.pr', { repo: repoName });
     subject = asString(pr.title) || repoName;
     url = asString(pr.html_url) || repoUrl;
   } else if (event.type === 'IssuesEvent') {
     const issue = (payload.issue as Record<string, unknown> | undefined) || {};
-    action = `在 ${repoName} 操作了 Issue`;
+    action = t('gh.act.issue', { repo: repoName });
     subject = asString(issue.title) || repoName;
     url = asString(issue.html_url) || repoUrl;
   } else if (event.type === 'IssueCommentEvent') {
     const comment = (payload.comment as Record<string, unknown> | undefined) || {};
-    action = `评论了 ${repoName} 的 Issue`;
+    action = t('gh.act.comment', { repo: repoName });
     subject = asString(comment.body)?.slice(0, 60) || repoName;
     url = asString(comment.html_url) || repoUrl;
   } else if (event.type === 'WatchEvent') {
-    action = `Star 了 ${repoName}`;
+    action = t('gh.act.star', { repo: repoName });
   } else if (event.type === 'ForkEvent') {
-    action = `Fork 了 ${repoName}`;
+    action = t('gh.act.fork', { repo: repoName });
   } else if (event.type === 'CreateEvent') {
     const refType = asString(payload.ref_type);
     const ref = asString(payload.ref);
-    action = `在 ${repoName} 创建了 ${refType || '内容'}`;
+    action = t('gh.act.create', { repo: repoName, type: refType || t('gh.act.type.create') });
     subject = ref || repoName;
   } else if (event.type === 'ReleaseEvent') {
     const release = (payload.release as Record<string, unknown> | undefined) || {};
-    action = `发布了 ${repoName} 的 Release`;
+    action = t('gh.act.release', { repo: repoName });
     subject = asString(release.name) || asString(release.tag_name) || repoName;
     url = asString(release.html_url) || repoUrl;
   }
@@ -650,6 +656,7 @@ export function useGithubProfile(username: Ref<string | null>, range: Ref<HeatRa
   }
 
   async function refresh(force = false) {
+    const { t } = useI18n();
     await ensureGithubToken();
     const login = (username.value || '').trim();
     if (!login) return;
@@ -676,7 +683,7 @@ export function useGithubProfile(username: Ref<string | null>, range: Ref<HeatRa
       const resetAt = await persistedRateLimitResetAt(K_GH_RATE_LIMIT);
       if (resetAt > 0) {
         loading.value = false;
-        error.value = rateLimitMessage(resetAt, 'GitHub 接口限流（配额用尽）');
+        error.value = rateLimitMessage(resetAt, t('gh.err.rateLimitCore'));
         retryTimer = setTimeout(() => {
           retryTimer = null;
           void refresh(true);
@@ -729,25 +736,25 @@ export function useGithubProfile(username: Ref<string | null>, range: Ref<HeatRa
         const resetAt = rateLimitResetAt(response);
         if (resetAt > 0) {
           void storeSet(K_GH_RATE_LIMIT, { resetAt });
-          error.value = rateLimitMessage(resetAt, 'GitHub 接口限流（配额用尽）');
+          error.value = rateLimitMessage(resetAt, t('gh.err.rateLimitCore'));
           retryTimer = setTimeout(() => {
             retryTimer = null;
             void refresh(true);
           }, retryDelayMs(resetAt));
         } else {
-          error.value = 'GitHub 接口限流，请稍后手动重试';
+          error.value = t('gh.err.limitedManual');
         }
         user.value = null;
       } else {
-        error.value = response.status === 404 ? `找不到用户 @${login}` : `GitHub Profile 失败（HTTP ${response.status}）`;
+        error.value = response.status === 404 ? t('gh.err.userNotFound', { login }) : t('gh.err.profileFailed', { n: response.status });
         user.value = null;
       }
     } else {
       const reason = profileResult.reason;
       error.value =
         reason instanceof DOMException && reason.name === 'AbortError'
-          ? '请求超时，请检查网络后重试'
-          : '无法连接 GitHub，请检查网络';
+          ? t('gh.err.netTimeout')
+          : t('gh.err.noNetwork');
     }
 
     if (eventResult.status === 'fulfilled' && eventResult.value.ok) {
@@ -756,7 +763,7 @@ export function useGithubProfile(username: Ref<string | null>, range: Ref<HeatRa
         activities.value = events.slice(0, 10).map(mapActivity);
       }
     } else if (!error.value) {
-      error.value = '无法加载最近动态';
+      error.value = t('gh.err.noActivity');
     }
 
     loading.value = false;

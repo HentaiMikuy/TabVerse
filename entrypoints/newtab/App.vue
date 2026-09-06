@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watchEffect } from 'vue';
 import TopBar from '../../components/TopBar.vue';
 import SearchBar from '../../components/SearchBar.vue';
 import SubBar from '../../components/SubBar.vue';
@@ -14,10 +14,17 @@ import BackgroundLayer from '../../components/BackgroundLayer.vue';
 import MinimalView from '../../components/MinimalView.vue';
 import { useTabs } from '../../composables/useTabs';
 import { useSettings } from '../../composables/useSettings';
+import { useI18n } from '../../utils/i18n';
 
 const { activeTab } = useTabs();
 const { settings, ready } = useSettings();
+const { t } = useI18n();
 const drawerOpen = ref(false);
+
+// 页面标题随语言更新（index.html 默认 zh-CN）
+watchEffect(() => {
+  document.title = t('app.title');
+});
 </script>
 
 <template>

@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useGithubProfile, type ContributionDay } from '../composables/useGithub';
 import { HEAT_RANGE_DAYS, formatCount, type HeatRange } from '../utils/common';
+import { useI18n } from '../utils/i18n';
 import { useSettings } from '../composables/useSettings';
 import { useTabs } from '../composables/useTabs';
 import { K_GH_USER, storeGet, storeRemove, storeSet } from '../composables/useStorage';
@@ -9,6 +10,9 @@ import { useToast } from '../composables/useToast';
 
 const { toast } = useToast();
 const { settings } = useSettings();
+const { t, isZh } = useI18n();
+
+const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const username = ref('');
 const applied = ref<string | null>(null);
@@ -33,8 +37,8 @@ function onLoginToggle() {
 function copyUserCode() {
   if (!ghLogin.userCode) return;
   void navigator.clipboard.writeText(ghLogin.userCode).then(
-    () => toast('已复制授权码'),
-    () => toast('复制失败，请手动输入')
+    () => toast(t('gh.copied')),
+    () => toast(t('gh.copyFailed'))
   );
 }
 
@@ -43,13 +47,13 @@ watch(ghToken, (token) => {
   if (token) void refresh(true);
 });
 
-const HEAT_RANGE_TEXT: Record<HeatRange, string> = {
-  quarter: '最近三个月',
-  half: '最近半年',
-  year: '过去一年',
-  two: '最近两年',
-  all: '全部历史',
-};
+const HEAT_RANGE_TEXT = computed<Record<HeatRange, string>>(() => ({
+  quarter: t('gh.heatRange.quarter'),
+  half: t('gh.heatRange.half'),
+  year: t('gh.heatRange.year'),
+  two: t('gh.heatRange.two'),
+  all: t('gh.heatRange.all'),
+}));
 
 /* ---------- 贡献热力图 ---------- */
 
@@ -109,7 +113,7 @@ const heat = computed<HeatData | null>(() => {
       total += day.count;
       // 该周包含当月 1 号时，在此列标注月份（一周最多含一个 1 号，无需去重）
       if (date.getDate() === 1) {
-        labels.push({ text: `${date.getMonth() + 1}月`, week: w });
+        labels.push({ text: isZh.value ? `${date.getMonth() + 1}月` : MONTHS_EN[date.getMonth()], week: w });
       }
     }
     weeks.push({ cells });
@@ -145,30 +149,30 @@ function showTip(event: MouseEvent, day: HeatCell | null) {
   tip.value = {
     x: rect.left + rect.width / 2,
     y: rect.top - 8,
-    text: day.count > 0 ? `${day.date} · ${day.count} 次贡献` : `${day.date} · 无贡献`,
+    text: day.count > 0 ? t('gh.tipContributed', { date: day.date, n: day.count }) : t('gh.tipNone', { date: day.date }),
   };
 }
 
 function relativeTime(value: string): string {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '未知时间';
+  if (Number.isNaN(date.getTime())) return t('time.unknown');
   // 取绝对值：过去（正常）与未来（源站时钟偏差）的时间都显示为正数时长
   const seconds = Math.abs(Math.round((date.getTime() - Date.now()) / 1000));
-  if (seconds < 60) return '刚刚';
+  if (seconds < 60) return t('time.justNow');
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} 分钟前`;
+  if (minutes < 60) return t('time.minAgo', { n: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} 小时前`;
+  if (hours < 24) return t('time.hourAgo', { n: hours });
   const days = Math.round(hours / 24);
-  if (days < 30) return `${days} 天前`;
+  if (days < 30) return t('time.dayAgo', { n: days });
   const months = Math.round(days / 30);
-  return `${months} 个月前`;
+  return t('time.monthAgo', { n: months });
 }
 
 async function view() {
   const login = username.value.trim();
   if (!login) {
-    toast('请输入 GitHub 用户名');
+    toast(t('gh.needUsername'));
     return;
   }
   applied.value = login;
@@ -181,7 +185,7 @@ function unbind() {
   username.value = '';
   reset();
   void storeRemove(K_GH_USER);
-  toast(login ? `已解绑 @${login}` : '已解绑');
+  toast(login ? t('gh.unbound', { login }) : t('gh.unboundNoName'));
 }
 
 onMounted(async () => {
@@ -198,30 +202,30 @@ onMounted(async () => {
     <div class="card-head">
       <div class="head-text">
         <h2>GitHub Profile</h2>
-        <div class="card-sub">公开资料与最近动态</div>
+        <div class="card-sub">{{ t('gh.sub') }}</div>
       </div>
       <div class="gh-controls">
         <button
           class="text-btn gh-login-btn"
-          :title="ghToken ? '退出 GitHub 授权' : '登录后 API 配额提升至 5000 次/时'"
+          :title="ghToken ? t('gh.logoutTitle') : t('gh.loginTip')"
           @click="onLoginToggle"
         >
-          {{ ghToken ? '已登录 · 退出' : ghLogin.status === 'waiting' ? '等待授权…' : '登录 GitHub' }}
+          {{ ghToken ? t('gh.loggedIn') : ghLogin.status === 'waiting' ? t('gh.waiting') : t('gh.login') }}
         </button>
-        <button v-if="applied" class="icon-btn small" title="刷新（获取最新数据）" :disabled="loading" @click="refresh(true)">
+        <button v-if="applied" class="icon-btn small" :title="t('gh.refresh')" :disabled="loading" @click="refresh(true)">
           <svg :class="{ spinning: isRefreshing }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
           </svg>
         </button>
-        <button v-if="applied" class="text-btn gh-unbind" title="清除已绑定的用户，回到初始状态" @click="unbind">解绑</button>
+        <button v-if="applied" class="text-btn gh-unbind" :title="t('gh.unbindTitle')" @click="unbind">{{ t('gh.unbind') }}</button>
       </div>
     </div>
 
     <!-- Device Flow 授权提示 -->
     <div v-if="ghLogin.status === 'waiting'" class="gh-device-box">
-      <p class="gh-device-line">在浏览器打开 <b>{{ ghLogin.verificationUri }}</b> 并输入代码：</p>
-      <button class="gh-device-code" title="点击复制授权码" @click="copyUserCode">{{ ghLogin.userCode }}</button>
-      <p class="field-tip">确认授权后这里会自动完成登录；点击「等待授权…」可取消。</p>
+      <p class="gh-device-line" v-html="t('gh.deviceLine', { url: ghLogin.verificationUri })"></p>
+      <button class="gh-device-code" :title="t('gh.copyCode')" @click="copyUserCode">{{ ghLogin.userCode }}</button>
+      <p class="field-tip">{{ t('gh.deviceTip') }}</p>
     </div>
     <div v-else-if="ghLogin.status === 'error'" class="gh-device-box gh-device-err">
       <p>{{ ghLogin.errorMsg }}</p>
@@ -231,19 +235,19 @@ onMounted(async () => {
       <input
         v-model="username"
         type="text"
-        placeholder="输入用户名"
+        :placeholder="t('gh.usernamePlaceholder')"
         autocomplete="off"
         spellcheck="false"
         @keydown.enter="view"
       />
-      <button class="dark-btn" :disabled="loading" @click="view">查看</button>
+      <button class="dark-btn" :disabled="loading" @click="view">{{ t('gh.view') }}</button>
     </div>
 
     <div class="gh-scroll">
       <template v-if="user">
         <div class="gh-identity">
           <a :href="user.profileUrl" target="_blank" rel="noreferrer" class="gh-avatar">
-            <img :src="user.avatarUrl" :alt="user.login + '的头像'" width="56" height="56" loading="lazy" />
+            <img :src="user.avatarUrl" :alt="t('gh.avatarAlt', { login: user.login })" width="56" height="56" loading="lazy" />
           </a>
           <div class="gh-identity-copy">
             <h3>{{ user.name }}</h3>
@@ -274,12 +278,12 @@ onMounted(async () => {
 
         <div v-if="heat" class="gh-heat" :class="{ 'gh-heat-lg': settings.ghHeatRange === 'quarter' }">
           <div class="gh-heat-head">
-            <h4 class="gh-section-title">贡献热力图</h4>
-            <span class="gh-heat-total">{{ heat.total.toLocaleString() }} 次贡献 · {{ HEAT_RANGE_TEXT[settings.ghHeatRange] }}</span>
+            <h4 class="gh-section-title">{{ t('gh.heatTitle') }}</h4>
+            <span class="gh-heat-total">{{ t('gh.heatTotal', { n: heat.total.toLocaleString(), range: HEAT_RANGE_TEXT[settings.ghHeatRange] }) }}</span>
           </div>
           <div class="gh-heat-graph" @mouseleave="tip = null">
             <div class="gh-heat-weekdays" aria-hidden="true">
-              <span></span><span>周一</span><span></span><span>周三</span><span></span><span>周五</span><span></span>
+              <span></span><span>{{ t('gh.mon') }}</span><span></span><span>{{ t('gh.wed') }}</span><span></span><span>{{ t('gh.fri') }}</span><span></span>
             </div>
             <div class="gh-heat-main" ref="heatScrollEl">
               <div class="gh-heat-months" :style="{ '--heat-cols': heat.weeks.length }">
@@ -299,17 +303,17 @@ onMounted(async () => {
             </div>
           </div>
           <div class="gh-heat-legend">
-            <span>少</span>
+            <span>{{ t('gh.less') }}</span>
             <i class="gh-heat-cell gh-heat-lv0"></i>
             <i class="gh-heat-cell gh-heat-lv1"></i>
             <i class="gh-heat-cell gh-heat-lv2"></i>
             <i class="gh-heat-cell gh-heat-lv3"></i>
             <i class="gh-heat-cell gh-heat-lv4"></i>
-            <span>多</span>
+            <span>{{ t('gh.more') }}</span>
           </div>
         </div>
 
-        <h4 class="gh-section-title">最近动态</h4>
+        <h4 class="gh-section-title">{{ t('gh.activityTitle') }}</h4>
         <ul v-if="activities.length" class="gh-activity">
           <li v-for="item in activities" :key="item.id">
             <a :href="item.url" target="_blank" rel="noreferrer" class="gh-activity-link">
@@ -322,17 +326,17 @@ onMounted(async () => {
             </a>
           </li>
         </ul>
-        <p v-else-if="!loading" class="gh-empty-tip">{{ error ? '' : '该用户暂无公开动态' }}</p>
+        <p v-else-if="!loading" class="gh-empty-tip">{{ error ? '' : t('gh.noActivity') }}</p>
       </template>
 
-      <div v-else-if="loading" class="gh-empty-tip">正在加载 @{{ applied }} 的资料…</div>
+      <div v-else-if="loading" class="gh-empty-tip">{{ t('gh.loadingProfile', { login: applied || '' }) }}</div>
       <div v-else-if="error" class="gh-message" role="status">
         <p>{{ error }}</p>
-        <button class="text-btn" @click="refresh(true)">重试</button>
+        <button class="text-btn" @click="refresh(true)">{{ t('gh.retry') }}</button>
       </div>
       <div v-else class="gh-empty-tip">
-        <p>输入 GitHub 用户名，查看公开资料与最近动态</p>
-        <p class="gh-empty-sub">数据来自 GitHub 公开 REST API，无需登录</p>
+        <p>{{ t('gh.emptyTitle') }}</p>
+        <p class="gh-empty-sub">{{ t('gh.emptySub') }}</p>
       </div>
     </div>
   </section>

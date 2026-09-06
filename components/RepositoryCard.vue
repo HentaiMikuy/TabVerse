@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { formatCount } from '../utils/common';
+import { useI18n } from '../utils/i18n';
 import type { TrendingRepo } from '../composables/useGithub';
 
 defineProps<{ repo: TrendingRepo }>();
+const { t } = useI18n();
 </script>
 
 <template>
@@ -12,7 +14,7 @@ defineProps<{ repo: TrendingRepo }>();
         <span class="repo-lang-dot" :style="{ background: repo.accent }" aria-hidden="true"></span>
         <h3 class="repo-card-title">{{ repo.name }}</h3>
       </div>
-      <p class="repo-card-desc" :title="repo.description">{{ repo.description || '暂无描述' }}</p>
+      <p class="repo-card-desc" :title="repo.description">{{ repo.description || t('repo.noDesc') }}</p>
       <div class="repo-card-meta">
         <span class="repo-card-lang">{{ repo.language }}</span>
         <span class="repo-card-stats">

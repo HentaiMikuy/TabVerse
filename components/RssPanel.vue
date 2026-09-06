@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from '../utils/i18n';
 import { useRss } from '../composables/useRss';
 import { useToast } from '../composables/useToast';
 import SiteIcon from './SiteIcon.vue';
 
 const { feeds, activeFeed, items, loading, error, refresh, selectFeed, addFeed, removeFeed, moveFeed, isRead, markRead, markAllRead } = useRss();
 const { toast } = useToast();
+const { t } = useI18n();
 
 const addUrl = ref('');
 const showAdd = ref(false);
@@ -125,15 +127,15 @@ function relativeTime(value: string): string {
   if (Number.isNaN(date.getTime())) return '';
   // 取绝对值：过去（正常）与未来（源站时钟偏差）的时间都显示为正数时长
   const seconds = Math.abs(Math.round((date.getTime() - Date.now()) / 1000));
-  if (seconds < 60) return '刚刚';
+  if (seconds < 60) return t('time.justNow');
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} 分钟前`;
+  if (minutes < 60) return t('time.minAgo', { n: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} 小时前`;
+  if (hours < 24) return t('time.hourAgo', { n: hours });
   const days = Math.round(hours / 24);
-  if (days < 30) return `${days} 天前`;
+  if (days < 30) return t('time.dayAgo', { n: days });
   const months = Math.round(days / 30);
-  return `${months} 个月前`;
+  return t('time.monthAgo', { n: months });
 }
 
 async function submitAdd() {
@@ -141,18 +143,18 @@ async function submitAdd() {
   if (ok) {
     addUrl.value = '';
     showAdd.value = false;
-    toast('已添加订阅源');
+    toast(t('rss.added'));
   }
 }
 
 async function onRemoveFeed(id: string) {
   if (feeds.value.length <= 1) {
-    toast('至少保留一个订阅源');
+    toast(t('rss.keepOne'));
     return;
   }
   const target = feeds.value.find((f) => f.id === id);
   await removeFeed(id);
-  if (target) toast(`已删除订阅源「${target.title}」`);
+  if (target) toast(t('rss.removed', { name: target.title }));
 }
 </script>
 
@@ -160,16 +162,16 @@ async function onRemoveFeed(id: string) {
   <section class="card gh-card rss-card">
     <div class="card-head">
       <div class="head-text">
-        <h2>RSS 阅读</h2>
-        <div class="card-sub">{{ activeFeed?.title || '订阅源' }}</div>
+        <h2>{{ t('rss.title') }}</h2>
+        <div class="card-sub">{{ activeFeed?.title || t('rss.feeds') }}</div>
       </div>
       <div class="rss-actions">
-        <button class="icon-btn" title="刷新" :disabled="loading" @click="refresh(true)">
+        <button class="icon-btn" :title="t('rss.refresh')" :disabled="loading" @click="refresh(true)">
           <svg :class="{ spinning: loading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
           </svg>
         </button>
-        <button class="icon-btn" title="添加订阅源" @click="showAdd = !showAdd">
+        <button class="icon-btn" :title="t('rss.add')" @click="showAdd = !showAdd">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 5v14M5 12h14" />
           </svg>
@@ -199,7 +201,7 @@ async function onRemoveFeed(id: string) {
         @dragend="onChipDragEnd"
       >
         <span class="rss-chip-title">{{ feed.title }}</span>
-        <span class="rss-chip-del" title="删除订阅源" draggable="false" @click.stop="onRemoveFeed(feed.id)">✕</span>
+        <span class="rss-chip-del" :title="t('rss.removeFeed')" draggable="false" @click.stop="onRemoveFeed(feed.id)">✕</span>
       </button>
     </div>
 
@@ -208,12 +210,12 @@ async function onRemoveFeed(id: string) {
       <input
         v-model="addUrl"
         type="text"
-        placeholder="RSS/Atom 订阅地址 http(s)://…"
+        :placeholder="t('rss.addPlaceholder')"
         autocomplete="off"
         spellcheck="false"
         @keydown.enter="submitAdd"
       />
-      <button class="dark-btn" :disabled="loading" @click="submitAdd">添加</button>
+      <button class="dark-btn" :disabled="loading" @click="submitAdd">{{ t('rss.addBtn') }}</button>
     </div>
 
     <div class="gh-scroll">
@@ -223,10 +225,10 @@ async function onRemoveFeed(id: string) {
 
       <div v-else-if="error && items.length === 0" class="gh-message" role="status">
         <p>{{ error }}</p>
-        <button class="text-btn" @click="refresh(true)">重试</button>
+        <button class="text-btn" @click="refresh(true)">{{ t('rss.retry') }}</button>
       </div>
 
-      <div v-else-if="items.length === 0" class="gh-empty-tip">该订阅源暂无文章</div>
+      <div v-else-if="items.length === 0" class="gh-empty-tip">{{ t('rss.empty') }}</div>
 
       <ul v-else class="rss-list">
         <li v-for="(item, idx) in items" :key="item.id">
@@ -253,8 +255,8 @@ async function onRemoveFeed(id: string) {
     </div>
 
     <div class="gh-footer rss-footer">
-      <span>已订阅 {{ feeds.length }} 个源 · 数据经公开代理读取</span>
-      <button v-if="items.length" class="text-btn" @click="markAllRead(items)">全部已读</button>
+      <span>{{ t('rss.footer', { n: feeds.length }) }}</span>
+      <button v-if="items.length" class="text-btn" @click="markAllRead(items)">{{ t('rss.markAllRead') }}</button>
     </div>
   </section>
 </template>

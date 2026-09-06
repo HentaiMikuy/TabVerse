@@ -6,7 +6,7 @@ import { useSettings } from '../composables/useSettings';
 const { bgUrl } = useBackground();
 const { settings } = useSettings();
 
-const active = computed(() => settings.bgType !== 'none' && !!bgUrl.value);
+const active = computed(() => settings.minimal && settings.bgType !== 'none' && !!bgUrl.value);
 const isVideo = computed(() => settings.bgType === 'video');
 const videoFailed = ref(false);
 

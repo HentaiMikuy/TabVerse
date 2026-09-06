@@ -1,4 +1,5 @@
 import { onMounted, reactive, readonly, ref, type Ref } from 'vue';
+import { useI18n } from '../utils/i18n';
 import { K_RSS, K_RSS_READ, K_RSS_REMOVED, storeGet, storeLocalGet, storeLocalSet, storeSet } from './useStorage';
 
 /* ---------------- RSS 订阅（无需后端，直接用浏览器 fetch 解析 XML/Atom） ---------------- */
@@ -129,6 +130,7 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<string>
  * 每个都带超时，避免个别源卡死整段加载。
  */
 async function fetchFeedText(url: string): Promise<string> {
+  const { t } = useI18n();
   const enc = encodeURIComponent(url);
   const attempts: { name: string; run: () => Promise<string> }[] = [
     { name: 'direct', run: () => fetchWithTimeout(url, 12000) },
@@ -143,20 +145,20 @@ async function fetchFeedText(url: string): Promise<string> {
       // 个别代理会把错误以 200 + JSON/文本返回（如 corsproxy.io 缺 API key），
       // 非 XML 内容视为本次尝试失败，继续回退到下一个代理
       if (!text.trimStart().startsWith('<')) {
-        lastError = `${attempt.name} 返回了非 XML 内容`;
+        lastError = `${attempt.name} ${t('rss.err.nonXml')}`;
         continue;
       }
       return text;
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        lastError = `${attempt.name} 超时`;
+        lastError = `${attempt.name} ${t('rss.err.timeout')}`;
       } else {
         lastError = err instanceof Error ? err.message : String(err);
       }
       // 继续尝试下一个
     }
   }
-  throw new Error(`无法读取订阅源（${lastError || '网络受限'}）`);
+  throw new Error(t('rss.err.cannotRead', { err: lastError || t('rss.err.network') }));
 }
 
 /** 每个源最近一次成功抓取的时间戳，用于最小化请求、防止被源站限流 */
@@ -208,6 +210,7 @@ function markAllRead(items: readonly RssItem[]) {
 }
 
 export function useRss() {
+  const { t } = useI18n();
   const feeds = ref<RssFeed[]>([]);
   const activeFeedId = ref<string>('');
   const items = ref<RssItem[]>([]);
@@ -320,7 +323,7 @@ export function useRss() {
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       if (feed.id === activeFeedId.value && !cached) {
-        error.value = err instanceof Error ? err.message : '订阅源解析失败';
+        error.value = err instanceof Error ? err.message : t('rss.err.parse');
         items.value = [];
         loading.value = false;
       }
@@ -357,7 +360,7 @@ export function useRss() {
     const trimmed = url.trim();
     if (!trimmed) return false;
     if (!/^https?:\/\//i.test(trimmed)) {
-      error.value = '请输入完整的 http(s):// 地址';
+      error.value = t('rss.err.invalidUrl');
       return false;
     }
     const exists = feeds.value.some((f) => f.url === trimmed);
@@ -381,7 +384,7 @@ export function useRss() {
 
   async function removeFeed(id: string) {
     if (feeds.value.length <= 1) {
-      error.value = '至少保留一个订阅源';
+      error.value = t('rss.err.keepOne');
       return;
     }
     const target = feeds.value.find((f) => f.id === id);

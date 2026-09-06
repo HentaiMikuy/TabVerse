@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { Todo } from '../utils/common';
+import { useI18n } from '../utils/i18n';
 import { K_TODOS, storeGet, storeSet } from '../composables/useStorage';
 import { useToast } from '../composables/useToast';
 
 const { toast } = useToast();
+const { t } = useI18n();
 const todos = ref<Todo[]>([]);
 
 /* 添加待办弹窗 */
@@ -21,12 +23,12 @@ const overdue = computed(() => {
 });
 const footText = computed(() => {
   if (!todos.value.length) return '';
-  const parts = [`共 ${todos.value.length} 项`, `未完成 ${undone.value} 项`];
-  if (overdue.value) parts.push(`逾期 ${overdue.value} 项`);
+  const parts = [t('todo.footTotal', { n: todos.value.length }), t('todo.footUndone', { n: undone.value })];
+  if (overdue.value) parts.push(t('todo.footOverdue', { n: overdue.value }));
   return parts.join(' · ');
 });
 
-const PRIORITY_TEXT = ['低', '中', '高'];
+const PRIORITY_TEXT = computed(() => [t('todo.prio0'), t('todo.prio1'), t('todo.prio2')]);
 
 function todayStr(): string {
   const d = new Date();
@@ -35,9 +37,8 @@ function todayStr(): string {
 
 function fmtDue(due: string): string {
   const [y, m, d] = due.split('-').map(Number);
-  const label = `${m}月${d}日`;
-  if (due === todayStr()) return '今天';
-  return label;
+  if (due === todayStr()) return t('todo.today');
+  return t('todo.dueFormat', { m, d });
 }
 
 function save() {
@@ -91,12 +92,12 @@ function removeTodo(idx: number) {
 function clearDone() {
   const kept = todos.value.filter((t) => !t.done);
   if (kept.length === todos.value.length) {
-    toast('没有已完成的待办');
+    toast(t('todo.noneDone'));
     return;
   }
   todos.value = kept;
   save();
-  toast('已清除完成的待办');
+  toast(t('todo.cleared'));
 }
 
 onMounted(async () => {
@@ -110,19 +111,19 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
   <div class="card todo-card">
     <div class="card-head">
       <div class="head-text">
-        <h2>待办事项</h2>
-        <div class="card-sub">支持截止日期与优先级</div>
+        <h2>{{ t('todo.title') }}</h2>
+        <div class="card-sub">{{ t('todo.sub') }}</div>
       </div>
       <span class="badge">{{ undone }}</span>
     </div>
-    <button class="todo-add-strip" @click="openModal">＋ 添加待办</button>
+    <button class="todo-add-strip" @click="openModal">{{ t('todo.add') }}</button>
     <ul class="todo-list">
-      <li v-if="!todos.length" class="todo-empty">暂无待办，添加一条开始今天吧 ✨</li>
+      <li v-if="!todos.length" class="todo-empty">{{ t('todo.empty') }}</li>
       <li v-for="(todo, idx) in todos" :key="todo.id">
         <button
           class="todo-check"
           :class="{ done: todo.done }"
-          :title="todo.done ? '标记为未完成' : '标记为已完成'"
+          :title="todo.done ? t('todo.markUndone') : t('todo.markDone')"
           @click="toggleTodo(todo)"
         >
           ✓
@@ -138,12 +139,12 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
         >
           {{ fmtDue(todo.due) }}
         </span>
-        <button class="todo-del" title="删除" @click="removeTodo(idx)">✕</button>
+        <button class="todo-del" :title="t('subbar.delete')" @click="removeTodo(idx)">✕</button>
       </li>
     </ul>
     <div class="list-foot todo-foot">
       <span>{{ footText }}</span>
-      <button class="text-btn" @click="clearDone">清除已完成</button>
+      <button class="text-btn" @click="clearDone">{{ t('todo.clearDone') }}</button>
     </div>
   </div>
 
@@ -151,35 +152,35 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
   <Teleport to="body">
     <div class="modal-backdrop" :class="{ hidden: !modalOpen }" @click="onModalBackdropClick">
       <div class="modal">
-        <h3>添加待办</h3>
+        <h3>{{ t('todo.addModal') }}</h3>
         <label class="field"
-          >内容
+          >{{ t('todo.content') }}
           <input
             ref="textInput"
             v-model="formText"
             type="text"
-            placeholder="要做什么…"
+            :placeholder="t('todo.contentPlaceholder')"
             autocomplete="off"
             @keydown.enter="saveModal"
           />
         </label>
         <div class="modal-row">
           <label class="field"
-            >截止日期
-            <input v-model="formDue" type="date" title="截止日期（可选）" />
+            >{{ t('todo.due') }}
+            <input v-model="formDue" type="date" :title="t('todo.dueTitle')" />
           </label>
           <label class="field"
-            >优先级
+            >{{ t('todo.priority') }}
             <select v-model="formPrio">
-              <option :value="0">低</option>
-              <option :value="1">中</option>
-              <option :value="2">高</option>
+              <option :value="0">{{ t('todo.prio0') }}</option>
+              <option :value="1">{{ t('todo.prio1') }}</option>
+              <option :value="2">{{ t('todo.prio2') }}</option>
             </select>
           </label>
         </div>
         <div class="modal-actions">
-          <button class="text-btn" @click="closeModal">取消</button>
-          <button class="dark-btn" @click="saveModal">保存</button>
+          <button class="text-btn" @click="closeModal">{{ t('subbar.cancel') }}</button>
+          <button class="dark-btn" @click="saveModal">{{ t('subbar.save') }}</button>
         </div>
       </div>
     </div>

@@ -1,8 +1,9 @@
 import { reactive } from 'vue';
-import { fetchJSON, WMO } from '../utils/common';
+import { fetchJSON, WMO_EMOJI } from '../utils/common';
 import { K_WEATHER, storeGet, storeSet } from './useStorage';
 import { useSettings } from './useSettings';
 import { useToast } from './useToast';
+import { useI18n } from '../utils/i18n';
 
 interface GeoLoc {
   name: string;
@@ -10,30 +11,36 @@ interface GeoLoc {
   lon: number;
 }
 
-const FALLBACK_CITY: GeoLoc = { name: '北京', lat: 39.9042, lon: 116.4074 };
-
 /** 天气缓存有效期：20 分钟内重复展示复用缓存，不再请求定位/预报接口（手动刷新或保存设置时强制绕过） */
 const WEATHER_CACHE_TTL = 20 * 60 * 1000;
+
+const { t: tInit } = useI18n();
 
 export const weather = reactive({
   emoji: '⏳',
   temp: '--',
   city: '',
-  desc: '正在获取天气…',
+  desc: tInit('weather.loading'),
   busy: false,
 });
 
+function fallbackCity(): GeoLoc {
+  const { t } = useI18n();
+  return { name: t('weather.fallbackCity'), lat: 39.9042, lon: 116.4074 };
+}
+
 async function resolveLocation(city: string): Promise<GeoLoc> {
+  const { t, isZh } = useI18n();
   if (city) {
     // 显式指定了城市：定位失败直接抛出错误，绝不静默回退自动定位 / 默认北京
     const g = await fetchJSON<{ results?: { name: string; latitude: number; longitude: number }[] }>(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=zh&format=json`
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=${isZh.value ? 'zh' : 'en'}&format=json`
     );
     if (g.results?.length) {
       const r = g.results[0];
       return { name: r.name, lat: r.latitude, lon: r.longitude };
     }
-    throw new Error(`未找到城市「${city}」`);
+    throw new Error(t('weather.notFound', { city }));
   }
   try {
     const ip = await fetchJSON<{ latitude?: number; longitude?: number; city?: string; region?: string }>(
@@ -41,27 +48,33 @@ async function resolveLocation(city: string): Promise<GeoLoc> {
       4500
     );
     if (typeof ip.latitude === 'number' && typeof ip.longitude === 'number') {
-      return { name: ip.city || ip.region || '当前位置', lat: ip.latitude, lon: ip.longitude };
+      return { name: ip.city || ip.region || t('weather.current'), lat: ip.latitude, lon: ip.longitude };
     }
   } catch {
     /* 网络受限则用默认城市 */
   }
-  return FALLBACK_CITY;
+  return fallbackCity();
 }
 
 function renderWeather(loc: GeoLoc, data: { current?: Record<string, number> }) {
+  const { t } = useI18n();
   const cur = data.current || {};
   const code = cur.weather_code ?? 3;
-  const [emoji, desc] = WMO[code] || ['🌡️', '未知'];
+  const emoji = WMO_EMOJI[code] || '🌡️';
   weather.emoji = cur.is_day === 0 && [0, 1].includes(code) ? '🌙' : emoji;
   weather.temp = `${Math.round(cur.temperature_2m ?? 0)}°`;
   weather.city = loc.name;
-  weather.desc = `${desc} · 湿度 ${Math.round(cur.relative_humidity_2m ?? 0)}% · 风 ${Math.round(cur.wind_speed_10m ?? 0)} km/h`;
+  weather.desc = t('weather.desc', {
+    desc: t('wmo.' + code),
+    h: Math.round(cur.relative_humidity_2m ?? 0),
+    w: Math.round(cur.wind_speed_10m ?? 0),
+  });
 }
 
 export function useWeather() {
   const { settings } = useSettings();
   const { toast } = useToast();
+  const { t } = useI18n();
 
   interface WeatherCache {
     at: number;
@@ -105,11 +118,11 @@ export function useWeather() {
         weather.emoji = '⏳';
         weather.temp = '--';
         weather.city = '';
-        weather.desc = '天气获取失败，点击 ⟳ 重试';
+        weather.desc = t('weather.fail');
       }
       if (force) {
         const message = err instanceof Error ? err.message : '';
-        toast(message && !message.startsWith('HTTP') && !message.startsWith('Failed') ? message : '天气获取失败，请检查网络后重试');
+        toast(message && !message.startsWith('HTTP') && !message.startsWith('Failed') ? message : t('weather.failNetwork'));
       }
     } finally {
       weather.busy = false;

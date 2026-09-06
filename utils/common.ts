@@ -8,6 +8,9 @@ export interface QuickLink {
 /** 自定义背景类型：无 / 图片 / 视频 */
 export type BgType = 'none' | 'image' | 'video';
 
+/** 界面显示语言：auto 跟随浏览器 */
+export type Lang = 'auto' | 'zh-CN' | 'en';
+
 export interface Settings {
   engineId: string;
   theme: 'light' | 'dark';
@@ -22,6 +25,10 @@ export interface Settings {
   bgType: BgType;
   /** 背景遮罩不透明度 0~1，保证前景文字可读 */
   bgScrim: number;
+  /** 时钟时区（IANA 时区 ID，空字符串表示跟随系统本地时间） */
+  timezone: string;
+  /** 界面显示语言 */
+  lang: Lang;
 }
 
 /** 贡献热力图显示时间范围 */
@@ -78,23 +85,46 @@ export const DEFAULT_SETTINGS: Settings = {
   minimal: false,
   bgType: 'none',
   bgScrim: 0.35,
+  timezone: '',
+  lang: 'auto',
 };
+
+/** 可选的时钟时区（IANA 时区 ID），空字符串表示跟随系统本地时间；name 按语言提供 */
+export const TIMEZONES: { id: string; name: { zh: string; en: string } }[] = [
+  { id: '', name: { zh: '跟随系统（本地时间）', en: 'Follow system (local time)' } },
+  { id: 'Asia/Shanghai', name: { zh: '北京', en: 'Beijing' } },
+  { id: 'Asia/Hong_Kong', name: { zh: '香港', en: 'Hong Kong' } },
+  { id: 'Asia/Taipei', name: { zh: '台北', en: 'Taipei' } },
+  { id: 'Asia/Tokyo', name: { zh: '东京', en: 'Tokyo' } },
+  { id: 'Asia/Seoul', name: { zh: '首尔', en: 'Seoul' } },
+  { id: 'Asia/Singapore', name: { zh: '新加坡', en: 'Singapore' } },
+  { id: 'Australia/Sydney', name: { zh: '悉尼', en: 'Sydney' } },
+  { id: 'Europe/London', name: { zh: '伦敦', en: 'London' } },
+  { id: 'Europe/Paris', name: { zh: '巴黎', en: 'Paris' } },
+  { id: 'Europe/Moscow', name: { zh: '莫斯科', en: 'Moscow' } },
+  { id: 'America/New_York', name: { zh: '纽约', en: 'New York' } },
+  { id: 'America/Chicago', name: { zh: '芝加哥', en: 'Chicago' } },
+  { id: 'America/Denver', name: { zh: '丹佛', en: 'Denver' } },
+  { id: 'America/Los_Angeles', name: { zh: '洛杉矶', en: 'Los Angeles' } },
+  { id: 'Pacific/Auckland', name: { zh: '奥克兰', en: 'Auckland' } },
+  { id: 'UTC', name: { zh: 'UTC（协调世界时）', en: 'UTC (Coordinated Universal Time)' } },
+];
 
 export const AVATAR_COLORS = ['#f97316', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
 export const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
-/** WMO 天气代码 → [emoji, 描述] */
-export const WMO: Record<number, [string, string]> = {
-  0: ['☀️', '晴'], 1: ['🌤️', '基本晴'], 2: ['⛅', '多云'], 3: ['☁️', '阴'],
-  45: ['🌫️', '雾'], 48: ['🌫️', '雾凇'],
-  51: ['🌦️', '小毛毛雨'], 53: ['🌦️', '毛毛雨'], 55: ['🌦️', '大毛毛雨'],
-  56: ['🌧️', '冻毛毛雨'], 57: ['🌧️', '强冻毛毛雨'],
-  61: ['🌧️', '小雨'], 63: ['🌧️', '中雨'], 65: ['🌧️', '大雨'],
-  66: ['🌧️', '冻雨'], 67: ['🌧️', '强冻雨'],
-  71: ['🌨️', '小雪'], 73: ['🌨️', '中雪'], 75: ['🌨️', '大雪'], 77: ['🌨️', '雪粒'],
-  80: ['🌦️', '阵雨'], 81: ['🌧️', '阵雨'], 82: ['🌧️', '强阵雨'],
-  85: ['🌨️', '阵雪'], 86: ['🌨️', '强阵雪'],
-  95: ['⛈️', '雷阵雨'], 96: ['⛈️', '雷雨伴冰雹'], 99: ['⛈️', '强雷雨伴冰雹'],
+/** WMO 天气代码 → emoji（描述文案按语言放在 i18n 字典的 wmo_* 键中） */
+export const WMO_EMOJI: Record<number, string> = {
+  0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️',
+  45: '🌫️', 48: '🌫️',
+  51: '🌦️', 53: '🌦️', 55: '🌦️',
+  56: '🌧️', 57: '🌧️',
+  61: '🌧️', 63: '🌧️', 65: '🌧️',
+  66: '🌧️', 67: '🌧️',
+  71: '🌨️', 73: '🌨️', 75: '🌨️', 77: '🌨️',
+  80: '🌦️', 81: '🌧️', 82: '🌧️',
+  85: '🌨️', 86: '🌨️',
+  95: '⛈️', 96: '⛈️', 99: '⛈️',
 };
 
 export function hashIndex(str: string, mod: number): number {

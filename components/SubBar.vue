@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { DEFAULT_LINKS, normalizeUrl, type QuickLink } from '../utils/common';
+import { useI18n } from '../utils/i18n';
 import { K_LINKS, storeGet, storeSet } from '../composables/useStorage';
 import { useTabs, TABS } from '../composables/useTabs';
 import { useToast } from '../composables/useToast';
@@ -8,6 +9,7 @@ import SiteIcon from './SiteIcon.vue';
 
 const { activeTab, subbarView, switchTab, toggleSubbar } = useTabs();
 const { toast } = useToast();
+const { t } = useI18n();
 
 const links = ref<QuickLink[]>([]);
 const editMode = ref(false);
@@ -39,7 +41,7 @@ function openLink(link: QuickLink) {
 function removeLink(idx: number) {
   const [removed] = links.value.splice(idx, 1);
   storeSet(K_LINKS, links.value);
-  toast(`已删除「${removed.name}」`);
+  toast(t('subbar.removed', { name: removed.name }));
 }
 
 function openAddModal() {
@@ -67,7 +69,7 @@ function closeModal() {
 function saveModal() {
   const url = normalizeUrl(formUrl.value);
   if (!url) {
-    toast('网址格式不正确');
+    toast(t('subbar.urlInvalid'));
     return;
   }
   let name = formName.value.trim();
@@ -80,10 +82,10 @@ function saveModal() {
   }
   if (editingIndex.value >= 0) {
     links.value[editingIndex.value] = { name, url };
-    toast('已保存修改');
+    toast(t('subbar.saved'));
   } else {
     links.value.push({ name, url });
-    toast('已添加快捷方式');
+    toast(t('subbar.added'));
   }
   storeSet(K_LINKS, links.value);
   closeModal();
@@ -145,7 +147,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
   <div class="subbar" :class="{ 'is-wide': activeTab === 'github' }">
     <button
       class="icon-btn subbar-toggle"
-      :title="subbarView === 'tabs' ? '显示快捷方式' : '显示页面标签'"
+      :title="subbarView === 'tabs' ? t('subbar.showLinks') : t('subbar.showTabs')"
       @click="toggleSubbar"
     >
       <svg v-if="subbarView === 'links'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -177,23 +179,23 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
           >
             <button
               class="pill-inner"
-              :title="editMode ? '点击编辑，拖拽排序' : link.url"
+              :title="editMode ? t('subbar.editHint') : link.url"
               @click="editMode ? openEditModal(idx) : openLink(link)"
             >
               <SiteIcon :url="link.url" :name="link.name" icon-class="pill-icon" />
               <span>{{ link.name }}</span>
             </button>
-            <button v-if="editMode" class="pill-del" title="删除" @click.stop="removeLink(idx)">✕</button>
+            <button v-if="editMode" class="pill-del" :title="t('subbar.delete')" @click.stop="removeLink(idx)">✕</button>
           </span>
           <span class="pill pill-add">
             <button class="pill-inner" @click="openAddModal">
               <span class="plus">+</span>
-              <span>添加</span>
+              <span>{{ t('subbar.add') }}</span>
             </button>
           </span>
         </div>
         <button class="text-btn links-edit" @click="editMode = !editMode">
-          {{ editMode ? '完成' : '管理快捷方式' }}
+          {{ editMode ? t('subbar.done') : t('subbar.manage') }}
         </button>
       </div>
 
@@ -205,7 +207,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
           :class="{ active: tab.id === activeTab }"
           @click="switchTab(tab.id)"
         >
-          {{ tab.name }}
+          {{ t('tab.' + tab.id) }}
         </button>
       </nav>
     </Transition>
@@ -215,18 +217,18 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
   <Teleport to="body">
     <div class="modal-backdrop" :class="{ hidden: !modalOpen }" @click="onModalBackdropClick">
       <div class="modal">
-        <h3>{{ editingIndex >= 0 ? '编辑快捷方式' : '添加快捷方式' }}</h3>
+        <h3>{{ editingIndex >= 0 ? t('subbar.editModal') : t('subbar.addModal') }}</h3>
         <label class="field"
-          >名称
-          <input v-model="formName" type="text" placeholder="如：B站" autocomplete="off" @keydown.enter="saveModal" />
+          >{{ t('subbar.name') }}
+          <input v-model="formName" type="text" :placeholder="t('subbar.namePlaceholder')" autocomplete="off" @keydown.enter="saveModal" />
         </label>
         <label class="field"
-          >网址
+          >{{ t('subbar.url') }}
           <input ref="urlInput" v-model="formUrl" type="text" placeholder="https://…" autocomplete="off" @keydown.enter="saveModal" />
         </label>
         <div class="modal-actions">
-          <button class="text-btn" @click="closeModal">取消</button>
-          <button class="dark-btn" @click="saveModal">保存</button>
+          <button class="text-btn" @click="closeModal">{{ t('subbar.cancel') }}</button>
+          <button class="dark-btn" @click="saveModal">{{ t('subbar.save') }}</button>
         </div>
       </div>
     </div>

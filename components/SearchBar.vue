@@ -2,8 +2,10 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
 import { debounce, ENGINES } from '../utils/common';
 import { useSettings } from '../composables/useSettings';
+import { useI18n } from '../utils/i18n';
 
 const { settings } = useSettings();
+const { t } = useI18n();
 const q = ref('');
 const menuOpen = ref(false);
 const inputEl = ref<HTMLInputElement>();
@@ -134,14 +136,14 @@ onBeforeUnmount(() => {
       ref="inputEl"
       v-model="q"
       type="text"
-      placeholder="搜索或输入网址"
+      :placeholder="t('search.placeholder')"
       autocomplete="off"
       spellcheck="false"
       @input="onInput(q)"
       @keydown.enter="doSearch"
       @keydown="onSugKeydown"
     />
-    <button class="engine-btn" title="切换搜索引擎" @click.stop="menuOpen = !menuOpen">
+    <button class="engine-btn" :title="t('search.engine')" @click.stop="menuOpen = !menuOpen">
       <span>{{ engine.name }}</span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="m6 9 6 6 6-6" />
@@ -159,7 +161,7 @@ onBeforeUnmount(() => {
       </button>
     </div>
     <span class="kbd-hint">/</span>
-    <button class="go-btn" title="搜索" @click="doSearch">
+    <button class="go-btn" :title="t('search.go')" @click="doSearch">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
         <path d="M5 12h14M13 6l6 6-6 6" />
       </svg>

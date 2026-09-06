@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { hostOf } from '../utils/common';
+import { useI18n } from '../utils/i18n';
 import { useToast } from '../composables/useToast';
 import { K_BM_VIEW, storeGet, storeSet } from '../composables/useStorage';
 import SiteIcon from './SiteIcon.vue';
@@ -16,17 +17,19 @@ interface BmNode {
 
 const BOOKMARK_PAGE = 60;
 
-const BUILTIN_FOLDER_NAMES: Record<string, string> = {
-  '1': '书签栏',
-  '2': '其他书签',
-  '3': '移动设备书签',
-  menu________: '书签菜单',
-  toolbar_____: '书签工具栏',
-  unfiled_____: '其他书签',
-  mobile______: '移动设备书签',
+/** Chrome 内置文件夹 id → i18n 键（本地化名称） */
+const BUILTIN_FOLDER_KEYS: Record<string, string> = {
+  '1': 'bm.builtin.bookmarks',
+  '2': 'bm.builtin.other',
+  '3': 'bm.builtin.mobile',
+  menu________: 'bm.builtin.menu',
+  toolbar_____: 'bm.builtin.toolbar',
+  unfiled_____: 'bm.builtin.unfiled',
+  mobile______: 'bm.builtin.mobile2',
 };
 
 const { toast } = useToast();
+const { t } = useI18n();
 
 const tree = ref<BmNode[]>([]);
 const total = ref(0);
@@ -62,7 +65,7 @@ function normalizeNodes(nodes: chrome.bookmarks.BookmarkTreeNode[]): BmNode[] {
     const bookmarkCount = children.reduce((sum, c) => sum + c.bookmarkCount, 0);
     if (!bookmarkCount) continue;
     const id = String(n.id);
-    out.push({ id, title: n.title || BUILTIN_FOLDER_NAMES[id] || '未命名文件夹', children, bookmarkCount });
+    out.push({ id, title: n.title || t(BUILTIN_FOLDER_KEYS[id]) || t('bm.unnamed'), children, bookmarkCount });
   }
   return out;
 }
@@ -221,12 +224,12 @@ function selectFolder(id: string) {
 
 const footText = computed(() => {
   if (!tree.value.length) return '';
-  if (searching.value) return matched.value.length ? `匹配 ${matched.value.length} 条书签 · 已搜索全部文件夹` : '';
-  if (viewMode.value === 'split') return `全部共 ${total.value} 条书签`;
+  if (searching.value) return matched.value.length ? t('bm.matchFoot', { n: matched.value.length }) : '';
+  if (viewMode.value === 'split') return t('bm.totalFoot', { n: total.value });
   const parts: string[] = [];
-  if (folders.value.length) parts.push(`${folders.value.length} 个文件夹`);
-  parts.push(`${levelLinks.value.length} 条书签`);
-  return parts.join(' · ') + (trail.value.length ? '' : ` · 全部共 ${total.value} 条`);
+  if (folders.value.length) parts.push(t('bm.folderFoot', { n: folders.value.length }));
+  parts.push(t('bm.linkFoot', { n: levelLinks.value.length }));
+  return parts.join(' · ') + (trail.value.length ? '' : ` · ${t('bm.totalFoot', { n: total.value })}`);
 });
 
 watch(kw, () => (shown.value = 0));
@@ -274,7 +277,7 @@ async function loadBookmarks() {
   } catch (e) {
     tree.value = [];
     total.value = 0;
-    toast('书签读取失败：' + (e as Error).message);
+    toast(t('bm.loadFailed', { msg: (e as Error).message }));
   }
 }
 
@@ -294,12 +297,12 @@ onMounted(() => {
   <div class="card bookmarks-card">
     <div class="card-head">
       <div class="head-text">
-        <h2>书签</h2>
-        <div class="card-sub">目录 / 双栏视图 · 输入关键字搜索</div>
+        <h2>{{ t('bm.title') }}</h2>
+        <div class="card-sub">{{ t('bm.sub') }}</div>
       </div>
       <button
         class="icon-btn"
-        :title="viewMode === 'dir' ? '切换到双栏视图' : '切换到目录视图'"
+        :title="viewMode === 'dir' ? t('bm.toSplit') : t('bm.toDir')"
         @click="viewMode = viewMode === 'dir' ? 'split' : 'dir'"
       >
         <svg v-if="viewMode === 'dir'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -312,15 +315,15 @@ onMounted(() => {
         </svg>
       </button>
     </div>
-    <input v-model="kw" class="line-input" type="text" placeholder="搜索书签或文件夹…" autocomplete="off" />
+    <input v-model="kw" class="line-input" type="text" :placeholder="t('bm.searchPlaceholder')" autocomplete="off" />
 
     <div v-if="!searching && tree.length && viewMode === 'dir'" class="bm-bar">
-      <button v-if="trail.length" class="bm-back" title="返回上一级" @click="goBack">
+      <button v-if="trail.length" class="bm-back" :title="t('bm.back')" @click="goBack">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="m15 18-6-6 6-6" />
         </svg>
       </button>
-      <span class="bm-crumb" :class="{ current: !trail.length }" title="全部书签" @click="trail.length && gotoCrumb(0)">全部书签</span>
+      <span class="bm-crumb" :class="{ current: !trail.length }" :title="t('bm.all')" @click="trail.length && gotoCrumb(0)">{{ t('bm.all') }}</span>
       <template v-for="(folder, i) in trail" :key="folder.id">
         <span class="bm-crumb-sep">›</span>
         <span class="bm-crumb" :class="{ current: i === trail.length - 1 }" :title="folder.title" @click="i < trail.length - 1 && gotoCrumb(i + 1)">{{ folder.title }}</span>
@@ -336,7 +339,7 @@ onMounted(() => {
           class="bm-row bm-folder-row bm-tree-row"
           :class="{ active: row.node.id === selectedId }"
           :style="{ paddingLeft: 10 + row.depth * 14 + 'px' }"
-          :title="`${row.node.bookmarkCount} 条书签`"
+          :title="t('bm.count', { n: row.node.bookmarkCount })"
           @click="selectFolder(row.node.id)"
         >
           <span
@@ -358,19 +361,19 @@ onMounted(() => {
           <span class="bm-title">{{ row.node.title }}</span>
           <span class="bm-folder-count">{{ row.node.bookmarkCount }}</span>
         </div>
-        <div v-if="!treeRows.length" class="bm-empty">没有可浏览的文件夹</div>
+        <div v-if="!treeRows.length" class="bm-empty">{{ t('bm.noFolders') }}</div>
       </div>
       <div class="bm-split-pane">
         <div class="bm-split-head">
-          <span class="bm-split-title">{{ selectedFolder?.title || '全部书签' }}</span>
-          <select v-model="sortMode" class="bm-sort" aria-label="书签排序方式">
-            <option value="default">默认排序</option>
-            <option value="recent">最近添加</option>
+          <span class="bm-split-title">{{ selectedFolder?.title || t('bm.all') }}</span>
+          <select v-model="sortMode" class="bm-sort" :aria-label="t('bm.sortLabel')">
+            <option value="default">{{ t('bm.sortDefault') }}</option>
+            <option value="recent">{{ t('bm.sortRecent') }}</option>
           </select>
-          <span class="bm-split-count">{{ selectedFolder ? selectedFolder.bookmarkCount : total }} 条书签</span>
+          <span class="bm-split-count">{{ t('bm.count', { n: selectedFolder ? selectedFolder.bookmarkCount : total }) }}</span>
         </div>
         <ul class="bm-split-list">
-          <li v-if="!paneRows.length" class="bm-empty">这个文件夹是空的</li>
+          <li v-if="!paneRows.length" class="bm-empty">{{ t('bm.emptyFolder') }}</li>
           <template v-else>
             <template v-for="row in visiblePaneRows" :key="row.node.id">
               <li
@@ -403,7 +406,7 @@ onMounted(() => {
               </li>
             </template>
             <li v-if="paneRows.length > visiblePaneRows.length" class="bm-more" @click="showMore">
-              显示更多（还有 {{ paneRows.length - visiblePaneRows.length }} 项）
+              {{ t('bm.showMore', { n: paneRows.length - visiblePaneRows.length }) }}
             </li>
           </template>
         </ul>
@@ -412,10 +415,10 @@ onMounted(() => {
 
     <ul v-else class="bm-list">
       <li v-if="!tree.length" class="bm-empty">
-        {{ hasApi ? '没有找到书签，在 Chrome 中收藏一些网页试试' : '安装为扩展后可自动读取浏览器书签' }}
+        {{ hasApi ? t('bm.noBookmarks') : t('bm.noApi') }}
       </li>
-      <li v-else-if="searching && !matched.length" class="bm-empty">没有匹配的书签</li>
-      <li v-else-if="!searching && viewMode === 'dir' && !levelAll.length" class="bm-empty">这个文件夹是空的</li>
+      <li v-else-if="searching && !matched.length" class="bm-empty">{{ t('bm.noMatch') }}</li>
+      <li v-else-if="!searching && viewMode === 'dir' && !levelAll.length" class="bm-empty">{{ t('bm.emptyFolder') }}</li>
 
       <template v-else-if="searching">
         <li
@@ -430,7 +433,7 @@ onMounted(() => {
           <span class="bm-domain">{{ m.path ? `${m.path} · ${hostOf(m.url)}` : hostOf(m.url) }}</span>
         </li>
         <li v-if="matched.length > visibleMatched.length" class="bm-more" @click="showMore">
-          显示更多（还有 {{ matched.length - visibleMatched.length }} 项）
+          {{ t('bm.showMore', { n: matched.length - visibleMatched.length }) }}
         </li>
       </template>
 
@@ -457,7 +460,7 @@ onMounted(() => {
           </li>
         </template>
         <li v-if="levelAll.length > visibleLevel.length" class="bm-more" @click="showMore">
-          显示更多（还有 {{ levelAll.length - visibleLevel.length }} 项）
+          {{ t('bm.showMore', { n: levelAll.length - visibleLevel.length }) }}
         </li>
       </template>
     </ul>
