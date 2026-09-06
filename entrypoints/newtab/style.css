@@ -84,6 +84,29 @@ body {
   height: 100%;
 }
 
+/* 普通/简约模式切换的过渡容器：保持原 #app 下纵向 flex 布局 */
+.layout-normal {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 普通 ⇄ 简约模式切换：淡入淡出 + 轻微缩放位移 */
+.mode-enter-active,
+.mode-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.mode-enter-from {
+  opacity: 0;
+  transform: scale(0.985) translateY(8px);
+}
+.mode-leave-to {
+  opacity: 0;
+  transform: scale(0.985) translateY(-8px);
+}
+
 h2 { font-size: 15px; font-weight: 600; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
 input { font-family: inherit; }
