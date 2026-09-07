@@ -88,38 +88,27 @@ function matchesKw(n: BmNode, k: string): boolean {
   return false;
 }
 
-function filterTree(nodes: BmNode[], k: string): BmNode[] {
-  if (!k) return nodes;
-  const out: BmNode[] = [];
-  for (const n of nodes) {
+interface Matched {
+  kind: 'folder' | 'link';
+  title: string;
+  url?: string;
+  path: string;
+  node?: BmNode; // folder 结果行：点击进入该文件夹用
+}
+
+/**
+ * 关键词过滤：书签按标题/URL 命中；文件夹按标题命中，
+ * 命中的文件夹作为单独的结果行，不再展开出其全部书签（子级里单独命中的仍逐条展示）
+ */
+function collectMatches(nodes: BmNode[], k: string, prefix: string[], folders: Matched[], links: Matched[]) {
+  for (const n of nodes || []) {
     if (n.url) {
-      if (matchesKw(n, k)) out.push(n);
+      if (matchesKw(n, k)) links.push({ kind: 'link', title: n.title, url: n.url, path: prefix.join(' / ') });
       continue;
     }
-    const selfMatch = matchesKw(n, k);
-    const kids = filterTree(n.children || [], k);
-    if (!selfMatch && !kids.length) continue;
-    out.push({
-      ...n,
-      children: kids.length ? kids : n.children,
-      bookmarkCount: kids.length ? countBookmarks(kids) : n.bookmarkCount,
-    });
+    if (matchesKw(n, k)) folders.push({ kind: 'folder', title: n.title, node: n, path: prefix.join(' / ') });
+    collectMatches(n.children || [], k, prefix.concat(n.title), folders, links);
   }
-  return out;
-}
-
-interface Matched {
-  title: string;
-  url: string;
-  path: string;
-}
-
-function collectMatched(nodes: BmNode[], prefix: string[], out: Matched[] = []): Matched[] {
-  for (const n of nodes || []) {
-    if (n.url) out.push({ title: n.title, url: n.url, path: prefix.join(' / ') });
-    else collectMatched(n.children || [], prefix.concat(n.title), out);
-  }
-  return out;
 }
 
 const searching = computed(() => !!kw.value.trim());
@@ -139,7 +128,14 @@ const folders = computed(() => level.value.filter((n) => !n.url));
 const levelLinks = computed(() => level.value.filter((n) => n.url));
 const levelAll = computed(() => folders.value.concat(levelLinks.value));
 
-const matched = computed(() => (searching.value ? collectMatched(filterTree(tree.value, kw.value.trim().toLowerCase()), []) : []));
+const matched = computed<Matched[]>(() => {
+  if (!searching.value) return [];
+  const k = kw.value.trim().toLowerCase();
+  const folderMatches: Matched[] = [];
+  const linkMatches: Matched[] = [];
+  collectMatches(tree.value, k, [], folderMatches, linkMatches);
+  return folderMatches.concat(linkMatches);
+});
 
 const limit = computed(() => shown.value || BOOKMARK_PAGE);
 const visibleLevel = computed(() => levelAll.value.slice(0, limit.value));
@@ -251,6 +247,13 @@ watch(viewMode, (v) => {
 
 function enterFolder(node: BmNode) {
   path.value.push(node.id);
+}
+/** 搜索结果里点击文件夹：清空关键词并进入该文件夹（双栏视图同步选中） */
+function enterMatchedFolder(m: Matched) {
+  if (!m.node) return;
+  kw.value = '';
+  path.value = [m.node.id];
+  if (viewMode.value === 'split') selectFolder(m.node.id);
 }
 function gotoCrumb(index: number) {
   path.value = path.value.slice(0, index);
@@ -423,14 +426,32 @@ onMounted(() => {
       <template v-else-if="searching">
         <li
           v-for="m in visibleMatched"
-          :key="m.url"
-          class="bm-row bm-link"
-          :title="(m.path ? m.path + '\n' : '') + m.url"
-          @click="openLink(m.url)"
+          :key="m.kind === 'folder' ? m.node!.id : m.url!"
+          class="bm-row"
+          :class="m.kind === 'folder' ? 'bm-folder-row' : 'bm-link'"
+          :title="m.kind === 'folder' ? m.path : (m.path ? m.path + '\n' : '') + (m.url || '')"
+          @click="m.kind === 'folder' ? enterMatchedFolder(m) : openLink(m.url || '')"
         >
-          <SiteIcon :url="m.url" :name="m.title" />
-          <span class="bm-title">{{ m.title || hostOf(m.url) }}</span>
-          <span class="bm-domain">{{ m.path ? `${m.path} · ${hostOf(m.url)}` : hostOf(m.url) }}</span>
+          <template v-if="m.kind === 'folder'">
+            <span class="bm-folder-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              </svg>
+            </span>
+            <span class="bm-title">{{ m.title }}</span>
+            <span v-if="m.path" class="bm-domain">{{ m.path }}</span>
+            <span class="bm-folder-count">{{ m.node!.bookmarkCount }}</span>
+            <span class="bm-enter">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+            </span>
+          </template>
+          <template v-else>
+            <SiteIcon :url="m.url || ''" :name="m.title" />
+            <span class="bm-title">{{ m.title || hostOf(m.url || '') }}</span>
+            <span class="bm-domain">{{ m.path ? `${m.path} · ${hostOf(m.url || '')}` : hostOf(m.url || '') }}</span>
+          </template>
         </li>
         <li v-if="matched.length > visibleMatched.length" class="bm-more" @click="showMore">
           {{ t('bm.showMore', { n: matched.length - visibleMatched.length }) }}
