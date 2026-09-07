@@ -273,7 +273,7 @@ const zh: Record<string, string> = {
   'settings.notTabverse': '不是 TabVerse 的导出文件',
   'settings.importFileError': '文件格式错误',
   'settings.aboutTitle': '关于',
-  'settings.about': 'TabVerse v0.5.0 · 信息聚合新标签页\n聚合搜索 / 快捷方式 / 天气 / 待办 / 浏览器书签，数据仅保存在本地浏览器中。',
+  'settings.about': 'TabVerse v0.6.0 · 信息聚合新标签页\n聚合搜索 / 快捷方式 / 天气 / 待办 / 浏览器书签，数据仅保存在本地浏览器中。',
 
   'lang.auto': '跟随浏览器',
   'lang.zh': '简体中文',
@@ -576,7 +576,7 @@ const en: Record<string, string> = {
   'settings.notTabverse': 'Not a TabVerse export file',
   'settings.importFileError': 'Invalid file format',
   'settings.aboutTitle': 'About',
-  'settings.about': 'TabVerse v0.5.0 · Info dashboard new tab\nSearch / shortcuts / weather / to-dos / browser bookmarks. Data stays local.',
+  'settings.about': 'TabVerse v0.6.0 · Info dashboard new tab\nSearch / shortcuts / weather / to-dos / browser bookmarks. Data stays local.',
 
   'lang.auto': 'Browser default',
   'lang.zh': '简体中文',
