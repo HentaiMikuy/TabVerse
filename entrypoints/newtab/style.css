@@ -1150,6 +1150,13 @@ body.edit-mode .pill .pill-del {
   z-index: -1;
   overflow: hidden;
   background: #000;
+  pointer-events: none;
+  /* 随普通/简约模式切换淡入淡出（与 mode 过渡同 0.22s），避免切换瞬间背景生硬消失 */
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+.bg-layer.on {
+  opacity: 1;
 }
 .bg-media {
   position: absolute;
@@ -1178,7 +1185,8 @@ body.edit-mode .pill .pill-del {
   flex-direction: column;
   align-items: center;
   padding-top: 28vh;
-  animation: fadeIn 0.4s ease both;
+  /* 首帧及模式切换的淡入统一由 App.vue 的 <Transition name="mode"> 驱动；
+     这里不能再加 fadeIn 动画：fill-mode 会把 opacity 钉在 1，覆盖 Vue 的过渡，导致退出简约模式时不淡出、硬切 */
 }
 .min-center {
   display: flex;

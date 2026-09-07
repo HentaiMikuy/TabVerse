@@ -32,7 +32,7 @@ watchEffect(() => {
 
   <!-- 等设置加载完成再决定布局，避免简约模式下打开新标签页先闪现普通模式 -->
   <template v-if="loaded">
-    <Transition name="mode" mode="out-in">
+    <Transition name="mode" mode="out-in" appear>
       <MinimalView
         v-if="settings.minimal"
         key="minimal"
