@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { Todo } from '../utils/common';
 import { useI18n } from '../utils/i18n';
-import { K_TODOS, storeGet, storeSet } from '../composables/useStorage';
+import { K_TODOS, asArray, storeGet, storeSet } from '../composables/useStorage';
 import { useToast } from '../composables/useToast';
 
 const { toast } = useToast();
@@ -101,7 +101,7 @@ function clearDone() {
 }
 
 onMounted(async () => {
-  todos.value = await storeGet<Todo[]>(K_TODOS, []);
+  todos.value = asArray<Todo>(await storeGet<Todo[] | Record<string, Todo> | null>(K_TODOS, []));
   document.addEventListener('keydown', onDocKeydown);
 });
 onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));

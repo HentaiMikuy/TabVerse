@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { DEFAULT_LINKS, normalizeUrl, type QuickLink } from '../utils/common';
 import { useI18n } from '../utils/i18n';
-import { K_LINKS, storeGet, storeSet } from '../composables/useStorage';
+import { K_LINKS, asArray, storeGet, storeSet } from '../composables/useStorage';
 import { useTabs, TABS } from '../composables/useTabs';
 import { useToast } from '../composables/useToast';
 import SiteIcon from './SiteIcon.vue';
@@ -28,8 +28,8 @@ const urlInput = ref<HTMLInputElement>();
 watch(editMode, (on) => document.body.classList.toggle('edit-mode', on));
 
 async function loadLinks() {
-  const stored = await storeGet<QuickLink[] | null>(K_LINKS, null);
-  links.value = Array.isArray(stored) && stored.length ? stored : DEFAULT_LINKS.slice();
+  const stored = asArray<QuickLink>(await storeGet<QuickLink[] | Record<string, QuickLink> | null>(K_LINKS, null));
+  links.value = stored.length ? stored : DEFAULT_LINKS.slice();
 }
 
 function openLink(link: QuickLink) {
@@ -213,7 +213,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
     </Transition>
   </div>
 
-  <!-- 添加/编辑快捷方式弹窗（挂到 body，避免被搜索区容器裁剪/错位） -->
+  <!-- 添加/编辑快捷访问弹窗（挂到 body，避免被搜索区容器裁剪/错位） -->
   <Teleport to="body">
     <div class="modal-backdrop" :class="{ hidden: !modalOpen }" @click="onModalBackdropClick">
       <div class="modal">

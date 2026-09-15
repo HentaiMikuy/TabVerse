@@ -56,19 +56,29 @@ export async function storeRemove(key: string): Promise<void> {
 }
 
 export async function storeSet(key: string, val: unknown): Promise<void> {
+  /* Vue reactive Proxy 传给 chrome.storage 会被序列化成 {0:…} 普通对象而非数组，
+     先 JSON 归一化成纯数据，保证存入的形状与字面量一致 */
+  const plain = JSON.parse(JSON.stringify(val ?? null)) as unknown;
   if (hasChromeStorage) {
     try {
-      await chrome.storage.sync.set({ [key]: val });
+      await chrome.storage.sync.set({ [key]: plain });
       return;
     } catch {
       /* 落到 localStorage */
     }
   }
   try {
-    localStorage.setItem(key, JSON.stringify(val));
+    localStorage.setItem(key, JSON.stringify(plain));
   } catch {
     /* 忽略 */
   }
+}
+
+/** 兼容旧数据：修复前的 reactive 数组曾被序列化成 {0:…} 形状，读出时恢复为数组 */
+export function asArray<T>(val: unknown): T[] {
+  if (Array.isArray(val)) return val as T[];
+  if (val && typeof val === 'object') return Object.values(val) as T[];
+  return [];
 }
 
 /* ---------- chrome.storage.local（大容量持久化：图标缓存、RSS 已读、令牌等） ---------- */

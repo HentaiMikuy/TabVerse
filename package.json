@@ -1,9 +1,9 @@
 {
   "name": "tabverse",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "type": "module",
-  "description": "更聚合、更好用的新标签页：聚合搜索、快捷方式、天气、待办、浏览器书签。卡片式仪表盘。",
+  "description": "更聚合、更好用的新标签页：聚合搜索、快捷访问、天气、待办、浏览器书签。卡片式仪表盘。",
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",

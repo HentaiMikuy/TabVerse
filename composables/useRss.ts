@@ -1,6 +1,6 @@
 import { onMounted, reactive, readonly, ref, type Ref } from 'vue';
 import { useI18n } from '../utils/i18n';
-import { K_RSS, K_RSS_READ, K_RSS_REMOVED, storeGet, storeLocalGet, storeLocalSet, storeSet } from './useStorage';
+import { K_RSS, K_RSS_READ, K_RSS_REMOVED, asArray, storeGet, storeLocalGet, storeLocalSet, storeSet } from './useStorage';
 
 /* ---------------- RSS 订阅（无需后端，直接用浏览器 fetch 解析 XML/Atom） ---------------- */
 
@@ -247,8 +247,8 @@ export function useRss() {
     // 用户主动删除过的默认源 URL，迁移补源时不再加回
     const removedSet = new Set((await storeGet<string[]>(K_RSS_REMOVED, [])) || []);
 
-    const stored = await storeGet<RssFeed[] | null>(K_RSS, null);
-    if (Array.isArray(stored) && stored.length) {
+    const stored = asArray<RssFeed>(await storeGet<RssFeed[] | Record<string, RssFeed> | null>(K_RSS, null));
+    if (stored.length) {
       // 丢弃已停用/失效的旧默认源（用户自定义的保留）
       const BROKEN = [
         'www.ruanyifeng.com',

@@ -267,7 +267,7 @@ body.dark-theme .icon-sun { display: none; }
 .go-btn:hover { opacity: 0.85; }
 .go-btn svg { width: 17px; height: 17px; }
 
-/* ---------- 快捷方式 pills ---------- */
+/* ---------- 快捷访问 pills ---------- */
 .subbar {
   position: relative; /* 切换动画中退场元素 absolute 的锚点，防止被锚到整页宽度 */
   width: 100%;
@@ -323,7 +323,7 @@ body.dark-theme .icon-sun { display: none; }
 .links-edit:hover { color: var(--text); }
 body.edit-mode .links-edit { color: var(--danger); }
 
-/* 副栏「快捷方式 / 标签页」切换动画 */
+/* 副栏「快捷访问 / 标签页」切换动画 */
 .sub-swap {
   flex: 1; min-width: 0;
   height: 52px;
