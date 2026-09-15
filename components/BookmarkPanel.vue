@@ -264,9 +264,6 @@ function goBack() {
 function showMore() {
   shown.value = limit.value + BOOKMARK_PAGE;
 }
-function openLink(url: string) {
-  location.href = url;
-}
 
 async function loadBookmarks() {
   if (!hasApi) return;
@@ -397,15 +394,13 @@ onMounted(() => {
                   </svg>
                 </span>
               </li>
-              <li
-                v-else
-                class="bm-row bm-link"
-                :title="row.node.url"
-                @click="openLink(row.node.url!)"
-              >
-                <SiteIcon :url="row.node.url!" :name="row.node.title" />
-                <span class="bm-title">{{ row.node.title || hostOf(row.node.url!) }}</span>
-                <span class="bm-domain">{{ hostOf(row.node.url!) }}</span>
+              <li v-else class="bm-item">
+                <!-- 用真实链接承载：右键菜单可「在新标签页中打开」，中键/⌘ 点击同样生效 -->
+                <a class="bm-row bm-link" :href="row.node.url!" :title="row.node.url">
+                  <SiteIcon :url="row.node.url!" :name="row.node.title" />
+                  <span class="bm-title">{{ row.node.title || hostOf(row.node.url!) }}</span>
+                  <span class="bm-domain">{{ hostOf(row.node.url!) }}</span>
+                </a>
               </li>
             </template>
             <li v-if="paneRows.length > visiblePaneRows.length" class="bm-more" @click="showMore">
@@ -424,15 +419,13 @@ onMounted(() => {
       <li v-else-if="!searching && viewMode === 'dir' && !levelAll.length" class="bm-empty">{{ t('bm.emptyFolder') }}</li>
 
       <template v-else-if="searching">
-        <li
-          v-for="m in visibleMatched"
-          :key="m.kind === 'folder' ? m.node!.id : m.url!"
-          class="bm-row"
-          :class="m.kind === 'folder' ? 'bm-folder-row' : 'bm-link'"
-          :title="m.kind === 'folder' ? m.path : (m.path ? m.path + '\n' : '') + (m.url || '')"
-          @click="m.kind === 'folder' ? enterMatchedFolder(m) : openLink(m.url || '')"
-        >
-          <template v-if="m.kind === 'folder'">
+        <template v-for="m in visibleMatched" :key="m.kind === 'folder' ? m.node!.id : m.url!">
+          <li
+            v-if="m.kind === 'folder'"
+            class="bm-row bm-folder-row"
+            :title="m.path"
+            @click="enterMatchedFolder(m)"
+          >
             <span class="bm-folder-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -446,13 +439,19 @@ onMounted(() => {
                 <path d="m9 6 6 6-6 6" />
               </svg>
             </span>
-          </template>
-          <template v-else>
-            <SiteIcon :url="m.url || ''" :name="m.title" />
-            <span class="bm-title">{{ m.title || hostOf(m.url || '') }}</span>
-            <span class="bm-domain">{{ m.path ? `${m.path} · ${hostOf(m.url || '')}` : hostOf(m.url || '') }}</span>
-          </template>
-        </li>
+          </li>
+          <li v-else class="bm-item">
+            <a
+              class="bm-row bm-link"
+              :href="m.url || ''"
+              :title="(m.path ? m.path + '\n' : '') + (m.url || '')"
+            >
+              <SiteIcon :url="m.url || ''" :name="m.title" />
+              <span class="bm-title">{{ m.title || hostOf(m.url || '') }}</span>
+              <span class="bm-domain">{{ m.path ? `${m.path} · ${hostOf(m.url || '')}` : hostOf(m.url || '') }}</span>
+            </a>
+          </li>
+        </template>
         <li v-if="matched.length > visibleMatched.length" class="bm-more" @click="showMore">
           {{ t('bm.showMore', { n: matched.length - visibleMatched.length }) }}
         </li>
@@ -460,10 +459,12 @@ onMounted(() => {
 
       <template v-else>
         <template v-for="n in visibleLevel" :key="n.id">
-          <li v-if="n.url" class="bm-row bm-link" :title="n.url" @click="openLink(n.url)">
-            <SiteIcon :url="n.url" :name="n.title" />
-            <span class="bm-title">{{ n.title || hostOf(n.url) }}</span>
-            <span class="bm-domain">{{ hostOf(n.url) }}</span>
+          <li v-if="n.url" class="bm-item">
+            <a class="bm-row bm-link" :href="n.url" :title="n.url">
+              <SiteIcon :url="n.url" :name="n.title" />
+              <span class="bm-title">{{ n.title || hostOf(n.url) }}</span>
+              <span class="bm-domain">{{ hostOf(n.url) }}</span>
+            </a>
           </li>
           <li v-else class="bm-row bm-folder-row" @click="enterFolder(n)">
             <span class="bm-folder-icon">
