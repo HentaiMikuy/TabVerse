@@ -25,12 +25,20 @@ const bgUrlInput = ref('');
 /** 背景本地文件建议上限：超出时 chrome.storage.local 写入可能很慢，但允许尝试 */
 const BG_FILE_WARN = 15 * 1024 * 1024;
 
+/* 关闭时抽屉会被置为 inert，若焦点还在抽屉内，浏览器会把焦点丢回 body，
+   因此在打开时记下来源元素，关闭时先还回去 */
+let lastFocused: HTMLElement | null = null;
+
 watch(
   () => props.open,
   (open) => {
     if (open) {
+      lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       cityInput.value = settings.city || '';
       bgUrlInput.value = bgUrl.value;
+    } else if (lastFocused?.isConnected) {
+      lastFocused.focus();
+      lastFocused = null;
     }
   }
 );
@@ -158,7 +166,10 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
 
 <template>
   <div class="drawer-backdrop" :class="{ hidden: !open }" @click="emit('close')"></div>
-  <aside class="settings-drawer" :class="{ open }" :aria-hidden="!open">
+  <!-- 用 inert 代替 aria-hidden：关闭时同时移出无障碍树并禁止聚焦（Chrome 102+ 支持）。
+       绑 undefined 而不是 false，因为 inert 不在 Vue 的特殊布尔属性表内，
+       一旦被当作普通属性写入，inert="false" 依然是生效的，抽屉会永久不可交互 -->
+  <aside class="settings-drawer" :class="{ open }" :inert="!open || undefined">
     <div class="drawer-head">
       <h2>{{ t('settings.title') }}</h2>
       <button class="icon-btn" @click="emit('close')">
