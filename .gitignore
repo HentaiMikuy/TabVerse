@@ -3,6 +3,7 @@ node_modules/
 .tmp/
 .output/
 .wxt/
+.keys/
 *.zip
 .DS_Store
 .omo/
