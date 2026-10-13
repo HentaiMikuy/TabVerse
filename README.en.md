@@ -17,7 +17,7 @@ By default, the new tab page only has a search box and a background image. TabVe
 | 🔍 Aggregated search | Google / Bing / Baidu / DuckDuckGo / GitHub engine switcher (default configurable in settings); opens URLs directly; shows search suggestions while typing (arrow keys to select); press `/` to focus |
 | 🔗 Shortcuts | Pill-shaped favorite sites; in "Manage" mode you can add / edit / delete and drag to reorder; site icons are fetched automatically, falling back to letter avatars |
 | 🔖 Browser bookmarks | Browse folders level by level (breadcrumb navigation); split view supports "Default order / Recently added"; global keyword search matches both bookmarks and folders — a matched folder appears as its own result row (with bookmark count; click to enter that folder directly) |
-| ✅ To-dos | Add / complete / delete / clear all done; due dates and priority (overdue hint); saved locally |
+| ✅ To-dos | Add / complete / edit / delete / clear all done; due dates and priority (overdue hint); saved locally |
 | 🌤️ Weather | Free open-source Open-Meteo data, automatic IP geolocation |
 | 📰 RSS feeds | Add / remove / reorder feeds; clicking a title marks it read; "Mark all read"; read state saved locally |
 | 🐙 GitHub panel | Discover trending / new repos and Profile contribution graph; optional OAuth login raises the API quota from 60/hour to 5000/hour |

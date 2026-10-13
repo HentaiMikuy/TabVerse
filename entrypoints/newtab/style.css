@@ -579,13 +579,15 @@ a.bm-row:focus-visible { outline: 2px solid var(--input-border-focus); outline-o
   min-height: 0; padding-right: 4px;
 }
 .todo-list li {
+  position: relative;
   display: flex; align-items: center; gap: 10px;
   padding: 8px 6px; border-radius: 8px; font-size: 13.5px;
   transition: background 0.12s ease;
 }
-.todo-list li:hover { background: var(--hover-bg); }
+.todo-list li:hover, .todo-list li:focus-within { background: var(--hover-bg); }
 .todo-list li + li { border-top: 1px solid var(--divider); }
-.todo-list li:hover + li, .todo-list li:hover { border-top-color: transparent; }
+.todo-list li:hover + li, .todo-list li:hover,
+.todo-list li:focus-within + li, .todo-list li:focus-within { border-top-color: transparent; }
 .todo-check {
   flex: none; width: 17px; height: 17px; border-radius: 50%;
   border: 1.5px solid var(--input-border-focus); font-size: 9px; color: transparent;
@@ -596,12 +598,31 @@ a.bm-row:focus-visible { outline: 2px solid var(--input-border-focus); outline-o
 .todo-check.done { background: var(--done); border-color: var(--done); color: #fff; }
 .todo-text { flex: 1; word-break: break-all; }
 .todo-text.done { text-decoration: line-through; color: var(--faint); }
-.todo-del {
+/* 编辑 / 删除按钮：脱离文档流悬浮成一条操作条，鼠标移到条目上时从右往左滑出、盖在日期上方，
+   因此不再占用正文宽度，日期可以贴到条目最右边。左侧 34px 为渐隐区（17px 处即转为不透明），
+   操作条总宽 78px > 最长日期（约 61px），所以日期会被完整盖住、不露半截残影。
+   滑出用 right: 8px → 0 而非 transform：静止态不越出条目边界，列表不会冒出横向滚动条 */
+.todo-acts {
+  position: absolute; top: 0; right: 8px; bottom: 0;
+  display: flex; align-items: center; gap: 2px;
+  padding: 0 2px 0 34px;
+  background: linear-gradient(to right, transparent, var(--hover-bg) 17px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease, right 0.16s ease;
+}
+.todo-list li:hover .todo-acts,
+.todo-list li:focus-within .todo-acts {
+  opacity: 1; right: 0;
+  pointer-events: auto;
+}
+.todo-edit, .todo-del {
   flex: none; width: 20px; height: 20px; border-radius: 6px;
-  color: transparent; font-size: 12px;
+  color: var(--text-dim); font-size: 12px;
   transition: all 0.15s ease;
 }
-.todo-list li:hover .todo-del { color: var(--text-dim); }
+.todo-edit:hover, .todo-del:hover { background: var(--card-bg); }
+.todo-edit:hover { color: var(--text); }
 .todo-del:hover { color: var(--danger); }
 .todo-add-strip {
   display: block; width: 100%; margin-bottom: 10px;

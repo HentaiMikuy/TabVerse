@@ -9,12 +9,16 @@ const { toast } = useToast();
 const { t } = useI18n();
 const todos = ref<Todo[]>([]);
 
-/* 添加待办弹窗 */
+/* 添加/编辑待办弹窗（editingId 为 null 时是「添加」模式，否则编辑该条待办） */
 const modalOpen = ref(false);
+const editingId = ref<number | null>(null);
 const formText = ref('');
 const formDue = ref('');
 const formPrio = ref(1); // 0=低 1=中 2=高
 const textInput = ref<HTMLInputElement>();
+
+const isEditing = computed(() => editingId.value !== null);
+const modalTitle = computed(() => (isEditing.value ? t('todo.editModal') : t('todo.addModal')));
 
 const undone = computed(() => todos.value.filter((t) => !t.done).length);
 const overdue = computed(() => {
@@ -45,12 +49,34 @@ function save() {
   storeSet(K_TODOS, todos.value);
 }
 
+/** 生成不与现有待办重复的 id：同一毫秒内连续添加时 Date.now() 会撞号，编辑按 id 定位就会改错条目 */
+function nextId(): number {
+  const used = new Set(todos.value.map((item) => item.id));
+  let id = Date.now();
+  while (used.has(id)) id += 1;
+  return id;
+}
+
 function openModal() {
+  editingId.value = null;
   formText.value = '';
   formDue.value = '';
   formPrio.value = 1;
   modalOpen.value = true;
   setTimeout(() => textInput.value?.focus());
+}
+
+/** 二次修改：把已有待办的内容 / 截止日期 / 优先级回填到弹窗 */
+function openEditModal(todo: Todo) {
+  editingId.value = todo.id;
+  formText.value = todo.text;
+  formDue.value = todo.due ?? '';
+  formPrio.value = todo.priority ?? 1;
+  modalOpen.value = true;
+  setTimeout(() => {
+    textInput.value?.focus();
+    textInput.value?.select();
+  });
 }
 
 function closeModal() {
@@ -60,13 +86,18 @@ function closeModal() {
 function saveModal() {
   const text = formText.value.trim();
   if (!text) return;
-  todos.value.unshift({
-    id: Date.now(),
-    text,
-    done: false,
-    due: formDue.value || undefined,
-    priority: formPrio.value,
-  });
+  const fields = { text, due: formDue.value || undefined, priority: formPrio.value };
+  if (editingId.value !== null) {
+    const target = todos.value.find((item) => item.id === editingId.value);
+    if (!target) return; // 编辑期间该条已被删除，直接放弃修改
+    // 只改内容/日期/优先级，保留完成状态与所在位置
+    Object.assign(target, fields);
+    save();
+    closeModal();
+    toast(t('todo.updated'));
+    return;
+  }
+  todos.value.unshift({ id: nextId(), done: false, ...fields });
   save();
   closeModal();
 }
@@ -128,7 +159,12 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
         >
           ✓
         </button>
-        <span class="todo-text" :class="{ done: todo.done }">{{ todo.text }}</span>
+        <span
+          class="todo-text"
+          :class="{ done: todo.done }"
+          :title="t('todo.editHint')"
+          @dblclick="openEditModal(todo)"
+        >{{ todo.text }}</span>
         <span v-if="todo.priority != null && todo.priority !== 1" class="todo-prio-chip" :class="'p' + todo.priority">
           {{ PRIORITY_TEXT[todo.priority] }}
         </span>
@@ -139,7 +175,10 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
         >
           {{ fmtDue(todo.due) }}
         </span>
-        <button class="todo-del" :title="t('subbar.delete')" @click="removeTodo(idx)">✕</button>
+        <span class="todo-acts">
+          <button class="todo-edit" :title="t('todo.edit')" @click="openEditModal(todo)">✎</button>
+          <button class="todo-del" :title="t('subbar.delete')" @click="removeTodo(idx)">✕</button>
+        </span>
       </li>
     </ul>
     <div class="list-foot todo-foot">
@@ -148,11 +187,11 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
     </div>
   </div>
 
-  <!-- 添加待办弹窗（挂到 body，避免被内容列容器裁剪/错位） -->
+  <!-- 添加/编辑待办弹窗（挂到 body，避免被内容列容器裁剪/错位） -->
   <Teleport to="body">
     <div class="modal-backdrop" :class="{ hidden: !modalOpen }" @click="onModalBackdropClick">
       <div class="modal">
-        <h3>{{ t('todo.addModal') }}</h3>
+        <h3>{{ modalTitle }}</h3>
         <label class="field"
           >{{ t('todo.content') }}
           <input
