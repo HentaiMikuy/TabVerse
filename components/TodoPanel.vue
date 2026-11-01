@@ -21,10 +21,7 @@ const isEditing = computed(() => editingId.value !== null);
 const modalTitle = computed(() => (isEditing.value ? t('todo.editModal') : t('todo.addModal')));
 
 const undone = computed(() => todos.value.filter((t) => !t.done).length);
-const overdue = computed(() => {
-  const today = todayStr();
-  return todos.value.filter((t) => !t.done && t.due && t.due < today).length;
-});
+const overdue = computed(() => todos.value.filter((t) => !t.done && t.due && daysFromToday(t.due) < 0).length);
 const footText = computed(() => {
   if (!todos.value.length) return '';
   const parts = [t('todo.footTotal', { n: todos.value.length }), t('todo.footUndone', { n: undone.value })];
@@ -34,15 +31,49 @@ const footText = computed(() => {
 
 const PRIORITY_TEXT = computed(() => [t('todo.prio0'), t('todo.prio1'), t('todo.prio2')]);
 
-function todayStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const DAY_MS = 86400000;
+
+/** 把截止日期解析成「当天零点」的 UTC 时间戳：用 UTC 算天数差，避开时区偏移与夏令时导致的 ±1 天误差 */
+function dueStamp(due: string): number {
+  const [y, m, d] = due.split('-').map(Number);
+  return Date.UTC(y, (m || 1) - 1, d || 1);
 }
 
+function todayStamp(): number {
+  const now = new Date();
+  return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+/** 相对今天的天数：正数=还剩几天，负数=已逾期几天，0=今天 */
+function daysFromToday(due: string): number {
+  return Math.round((dueStamp(due) - todayStamp()) / DAY_MS);
+}
+
+/** 完整日期（带年份），用作悬浮提示，任何简写形式都能在此核对 */
+function fmtFullDue(due: string): string {
+  const [y, m, d] = due.split('-').map(Number);
+  if (!y || !m || !d) return due;
+  return t('todo.dueFull', { y, m, d });
+}
+
+/**
+ * 日期标签的显示策略：
+ * - 今天 / 明天 / 后天 → 相对描述，最直观
+ * - 今年的其它日期 → 只显示「月日」（不会和今年混淆）
+ * - 非今年：只显示「月日」会被误读成今年，所以一年内改显示「还剩 N 天」；
+ *   更远的日期用带年份的完整日期，避免出现「还剩 800 天」这种不好换算的数字
+ */
 function fmtDue(due: string): string {
   const [y, m, d] = due.split('-').map(Number);
-  if (due === todayStr()) return t('todo.today');
-  return t('todo.dueFormat', { m, d });
+  if (!y || !m || !d) return due;
+  const days = daysFromToday(due);
+  if (days === 0) return t('todo.today');
+  if (days === 1) return t('todo.tomorrow');
+  if (days === 2) return t('todo.dayAfter');
+  if (y === new Date().getFullYear()) return t('todo.dueFormat', { m, d });
+  if (days < 0) return fmtFullDue(due); // 往年的逾期项同样带上年份
+  if (days <= 365) return t('todo.daysLeft', { n: days });
+  return fmtFullDue(due);
 }
 
 function save() {
@@ -171,7 +202,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
         <span
           v-if="todo.due"
           class="todo-due-chip"
-          :class="{ overdue: !todo.done && todo.due < todayStr() }"
+          :class="{ overdue: !todo.done && daysFromToday(todo.due) < 0 }"
+          :title="fmtFullDue(todo.due)"
         >
           {{ fmtDue(todo.due) }}
         </span>

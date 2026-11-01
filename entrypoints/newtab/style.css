@@ -599,14 +599,14 @@ a.bm-row:focus-visible { outline: 2px solid var(--input-border-focus); outline-o
 .todo-text { flex: 1; word-break: break-all; }
 .todo-text.done { text-decoration: line-through; color: var(--faint); }
 /* 编辑 / 删除按钮：脱离文档流悬浮成一条操作条，鼠标移到条目上时从右往左滑出、盖在日期上方，
-   因此不再占用正文宽度，日期可以贴到条目最右边。左侧 34px 为渐隐区（17px 处即转为不透明），
-   操作条总宽 78px > 最长日期（约 61px），所以日期会被完整盖住、不露半截残影。
+   因此不再占用正文宽度，日期可以贴到条目最右边。左侧 46px 为渐隐区（20px 处即转为不透明），
+   操作条总宽 90px > 最长日期（「还剩 365 天」约 70px），所以日期会被完整盖住、不露半截残影。
    滑出用 right: 8px → 0 而非 transform：静止态不越出条目边界，列表不会冒出横向滚动条 */
 .todo-acts {
   position: absolute; top: 0; right: 8px; bottom: 0;
   display: flex; align-items: center; gap: 2px;
-  padding: 0 2px 0 34px;
-  background: linear-gradient(to right, transparent, var(--hover-bg) 17px);
+  padding: 0 2px 0 46px;
+  background: linear-gradient(to right, transparent, var(--hover-bg) 20px);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.16s ease, right 0.16s ease;
