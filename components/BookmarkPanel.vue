@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { hostOf } from '../utils/common';
 import { useI18n } from '../utils/i18n';
 import { useToast } from '../composables/useToast';
-import { K_BM_VIEW, storeGet, storeSet } from '../composables/useStorage';
+import { K_BM_VIEW, storeLocalGet, storeLocalSet } from '../composables/useStorage';
 import SiteIcon from './SiteIcon.vue';
 
 interface BmNode {
@@ -36,7 +36,7 @@ const total = ref(0);
 const path = ref<string[]>([]); // 当前所在文件夹的 id 路径
 const shown = ref(0); // 当前目录/搜索结果已展示的条数
 const kw = ref('');
-/** 视图偏好初始值：同步读 localStorage 避免首帧闪烁，挂载后再用同步存储校正 */
+/** 视图偏好初始值：同步读 localStorage 避免首帧闪烁，挂载后再用 chrome.storage.local 校正 */
 function initialViewMode(): 'dir' | 'split' {
   try {
     const v = localStorage.getItem(K_BM_VIEW);
@@ -232,13 +232,13 @@ watch(kw, () => (shown.value = 0));
 watch(path, () => (shown.value = 0), { deep: true });
 watch(viewMode, (v) => {
   shown.value = 0;
-  // 持久化视图偏好（localStorage 同步写供下次首帧直读，sync 存储跨设备）
+  // 持久化视图偏好（localStorage 同步写供下次首帧直读，chrome.storage.local 持久化；设备态不跨设备）
   try {
     localStorage.setItem(K_BM_VIEW, v);
   } catch {
     /* 忽略 */
   }
-  void storeSet(K_BM_VIEW, v);
+  void storeLocalSet(K_BM_VIEW, v);
   // 切到双栏时若还没有选中文件夹，默认选中第一个顶层文件夹
   if (viewMode.value === 'split' && !selectedId.value && tree.value.length) {
     selectFolder(tree.value[0].id);
@@ -281,9 +281,9 @@ async function loadBookmarks() {
   }
 }
 
-/** 挂载后异步校正视图偏好：以 chrome.storage.sync（可跨设备同步）为准 */
+/** 挂载后异步校正视图偏好：以 chrome.storage.local（同一设备跨标签页一致）为准 */
 async function loadViewPref() {
-  const saved = await storeGet<'dir' | 'split' | null>(K_BM_VIEW, null);
+  const saved = await storeLocalGet<'dir' | 'split' | null>(K_BM_VIEW, null);
   if (saved === 'dir' || saved === 'split') viewMode.value = saved;
 }
 

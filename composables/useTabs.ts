@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import { K_SUBVIEW, K_TAB, storeGet, storeSet } from './useStorage';
+import { K_SUBVIEW, K_TAB, storeLocalGet, storeLocalSet } from './useStorage';
 
 export interface TabDef {
   id: string;
@@ -19,7 +19,7 @@ let loading: Promise<void> | null = null;
 
 export function useTabs() {
   if (!loading) {
-    loading = Promise.all([storeGet<string>(K_TAB, 'home'), storeGet<'links' | 'tabs'>(K_SUBVIEW, 'links')]).then(
+    loading = Promise.all([storeLocalGet<string>(K_TAB, 'home'), storeLocalGet<'links' | 'tabs'>(K_SUBVIEW, 'links')]).then(
       ([tab, view]) => {
         if (TABS.some((t) => t.id === tab)) activeTab.value = tab;
         subbarView.value = view;
@@ -30,12 +30,12 @@ export function useTabs() {
   function switchTab(id: string) {
     if (!TABS.some((t) => t.id === id)) return;
     activeTab.value = id;
-    storeSet(K_TAB, id);
+    storeLocalSet(K_TAB, id);
   }
 
   function toggleSubbar() {
     subbarView.value = subbarView.value === 'tabs' ? 'links' : 'tabs';
-    storeSet(K_SUBVIEW, subbarView.value);
+    storeLocalSet(K_SUBVIEW, subbarView.value);
   }
 
   return { activeTab, subbarView, switchTab, toggleSubbar };

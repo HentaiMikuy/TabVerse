@@ -5,7 +5,7 @@ import { HEAT_RANGE_DAYS, formatCount, type HeatRange } from '../utils/common';
 import { useI18n } from '../utils/i18n';
 import { useSettings } from '../composables/useSettings';
 import { useTabs } from '../composables/useTabs';
-import { K_GH_USER, storeGet, storeRemove, storeSet } from '../composables/useStorage';
+import { K_GH_USER, storeLocalGet, storeLocalRemove, storeLocalSet } from '../composables/useStorage';
 import { useToast } from '../composables/useToast';
 
 const { toast } = useToast();
@@ -176,7 +176,7 @@ async function view() {
     return;
   }
   applied.value = login;
-  storeSet(K_GH_USER, login);
+  storeLocalSet(K_GH_USER, login);
 }
 
 function unbind() {
@@ -184,12 +184,12 @@ function unbind() {
   applied.value = null;
   username.value = '';
   reset();
-  void storeRemove(K_GH_USER);
+  void storeLocalRemove(K_GH_USER);
   toast(login ? t('gh.unbound', { login }) : t('gh.unboundNoName'));
 }
 
 onMounted(async () => {
-  const saved = await storeGet<string>(K_GH_USER, '');
+  const saved = await storeLocalGet<string>(K_GH_USER, '');
   if (saved) {
     username.value = saved;
     applied.value = saved;

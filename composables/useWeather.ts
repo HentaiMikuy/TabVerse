@@ -1,6 +1,6 @@
 import { reactive } from 'vue';
 import { fetchJSON, WMO_EMOJI } from '../utils/common';
-import { K_WEATHER, storeGet, storeSet } from './useStorage';
+import { K_WEATHER, storeLocalGet, storeLocalSet } from './useStorage';
 import { useSettings } from './useSettings';
 import { useToast } from './useToast';
 import { useI18n } from '../utils/i18n';
@@ -89,7 +89,7 @@ export function useWeather() {
     try {
       // 有效缓存（同城市 + 20 分钟内）：直接展示，不发起任何请求
       if (!force) {
-        const fresh = await storeGet<WeatherCache | null>(K_WEATHER, null);
+        const fresh = await storeLocalGet<WeatherCache | null>(K_WEATHER, null);
         if (
           fresh?.at &&
           Date.now() - fresh.at < WEATHER_CACHE_TTL &&
@@ -107,10 +107,10 @@ export function useWeather() {
           `&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day&timezone=auto`
       );
       renderWeather(loc, data);
-      storeSet(K_WEATHER, { at: Date.now(), loc, data });
+      storeLocalSet(K_WEATHER, { at: Date.now(), loc, data });
     } catch (err) {
       // 兜底缓存仅在“未设置城市”或“缓存城市与当前设置一致”时可用，避免展示旧城市的天气
-      const cache = await storeGet<WeatherCache | null>(K_WEATHER, null);
+      const cache = await storeLocalGet<WeatherCache | null>(K_WEATHER, null);
       const cacheUsable = !!cache?.loc && !!cache.data && (!city || cache.loc.name === city);
       if (cacheUsable) {
         renderWeather(cache.loc, cache.data);

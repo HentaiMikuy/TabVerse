@@ -28,7 +28,12 @@ By default, the new tab page only has a search box and a background image. TabVe
 | 🧘 Minimal mode | One click hides all panels, leaving only time, date and the search box — a truly minimal new tab |
 | 🖼️ Custom background | Image / video background in minimal mode (local file or URL), adjustable scrim for text readability |
 
-Data is stored only in Chrome's extension storage (`chrome.storage.sync` / `chrome.storage.local`) — nothing is ever sent to a self-hosted or third-party server. When signed into Chrome with sync enabled, data in `sync` roams across the account's devices through Chrome's own extension sync; otherwise it stays on the device only.
+Data is stored only in Chrome's extension storage — nothing is ever sent to a self-hosted or third-party server. The two storage areas have distinct jobs:
+
+- **Cross-device sync (`chrome.storage.sync`) holds user data only**: settings, to-dos, shortcuts and RSS feed URLs. With Chrome sync enabled these roam across the account's devices; otherwise they stay local.
+- **Everything else stays on the device (`chrome.storage.local`)**: weather / RSS article / GitHub caches, device state (active tab, view preferences), the GitHub token, custom backgrounds and site icons. Caches are per-device by nature — a new device just refetches or logs in again — so they never consume the sync quota (8 KB per item / 100 KB total / 120 writes per minute).
+
+Settings → Export / Import covers exactly that user data, and caches or device state left in `sync` by older versions are migrated to `local` automatically after an upgrade.
 
 ## Tech stack
 

@@ -227,7 +227,7 @@ export function useRss() {
   let persisted: PersistedCache = {};
 
   async function loadPersistedCache() {
-    persisted = (await storeGet<PersistedCache>(K_RSS_CACHE, {})) || {};
+    persisted = (await storeLocalGet<PersistedCache>(K_RSS_CACHE, {})) || {};
     // 恢复到内存缓存，便于页面打开即显
     for (const [url, entry] of Object.entries(persisted)) {
       if (entry?.items?.length) memoryCache.set(url, { title: entry.title, items: entry.items });
@@ -238,7 +238,7 @@ export function useRss() {
     const entry = { title, items: itemList, at: Date.now() };
     persisted = { ...persisted, [url]: entry };
     memoryCache.set(url, { title, items: itemList });
-    storeSet(K_RSS_CACHE, persisted);
+    storeLocalSet(K_RSS_CACHE, persisted);
   }
 
   async function loadFeeds() {

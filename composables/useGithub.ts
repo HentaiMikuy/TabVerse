@@ -7,12 +7,9 @@ import {
   K_GH_REPOS,
   K_GH_SEARCH_RATE_LIMIT,
   K_GH_TOKEN,
-  storeGet,
   storeLocalGet,
   storeLocalRemove,
   storeLocalSet,
-  storeRemove,
-  storeSet,
 } from './useStorage';
 
 /* ---------------- GitHub 限流识别与缓存 ---------------- */
@@ -42,7 +39,7 @@ interface RateLimitMarker {
 
 /** 读取持久化的限流重置时间；窗口已过视为未限流（返回 0），下次成功后会被清除 */
 async function persistedRateLimitResetAt(key: string): Promise<number> {
-  const marker = await storeGet<RateLimitMarker | null>(key, null);
+  const marker = await storeLocalGet<RateLimitMarker | null>(key, null);
   if (!marker || marker.resetAt <= Date.now()) return 0;
   return marker.resetAt;
 }
@@ -140,8 +137,8 @@ async function startGithubLogin(clientId: string) {
           ghLoginState.status = 'success';
           void storeLocalSet(K_GH_TOKEN, td.access_token);
           // 登录后配额提升，清除未登录时持久化的限流标记，避免仍按旧窗口拦截请求
-          void storeRemove(K_GH_RATE_LIMIT);
-          void storeRemove(K_GH_SEARCH_RATE_LIMIT);
+          void storeLocalRemove(K_GH_RATE_LIMIT);
+          void storeLocalRemove(K_GH_SEARCH_RATE_LIMIT);
         } else if (td.error === 'authorization_pending' || td.error === 'slow_down') {
           /* 继续轮询 */
         } else {
@@ -178,8 +175,8 @@ async function logoutGithub() {
   ghToken.value = '';
   await storeLocalRemove(K_GH_TOKEN);
   // 退出登录后回到未认证配额，旧限流标记才可能有效
-  void storeRemove(K_GH_RATE_LIMIT);
-  void storeRemove(K_GH_SEARCH_RATE_LIMIT);
+  void storeLocalRemove(K_GH_RATE_LIMIT);
+  void storeLocalRemove(K_GH_SEARCH_RATE_LIMIT);
 }
 
 /** 带超时的 fetch：超时或外部信号中止时以 AbortError 拒绝，避免请求挂起导致界面一直 loading */
@@ -326,7 +323,7 @@ export function useGithubRepos(language: Ref<string>, period: Ref<GithubPeriod>,
 
     // 命中缓存：直接展示，不再消耗 search 配额（10 次/分钟）
     if (!force) {
-      const cached = await storeGet<ReposCache | null>(K_GH_REPOS, null);
+      const cached = await storeLocalGet<ReposCache | null>(K_GH_REPOS, null);
       if (cached && cached.key === cacheKey && Date.now() - cached.fetchedAt < CACHE_TTL) {
         repos.value = cached.repos;
         loading.value = false;
@@ -364,7 +361,7 @@ export function useGithubRepos(language: Ref<string>, period: Ref<GithubPeriod>,
         if (isRateLimitedResponse(response)) {
           const resetAt = rateLimitResetAt(response);
           if (resetAt > 0) {
-            void storeSet(K_GH_SEARCH_RATE_LIMIT, { resetAt });
+            void storeLocalSet(K_GH_SEARCH_RATE_LIMIT, { resetAt });
             error.value = rateLimitMessage(resetAt, t('gh.err.rateLimitSearch'));
             retryTimer = setTimeout(() => {
               retryTimer = null;
@@ -381,8 +378,8 @@ export function useGithubRepos(language: Ref<string>, period: Ref<GithubPeriod>,
       const payload: { items?: SearchRepoItem[] } = await response.json().catch(() => ({}));
       if (!Array.isArray(payload.items)) throw new Error(t('gh.err.badData'));
       repos.value = payload.items.map(mapRepo);
-      void storeSet(K_GH_REPOS, { key: cacheKey, fetchedAt: Date.now(), repos: repos.value });
-      void storeRemove(K_GH_SEARCH_RATE_LIMIT);
+      void storeLocalSet(K_GH_REPOS, { key: cacheKey, fetchedAt: Date.now(), repos: repos.value });
+      void storeLocalRemove(K_GH_SEARCH_RATE_LIMIT);
     } catch (err) {
       if (ctrl.signal.aborted || version !== requestVersion) return;
       // 内部超时中止（AbortError 但外部 signal 未中止）
@@ -667,7 +664,7 @@ export function useGithubProfile(username: Ref<string | null>, range: Ref<HeatRa
 
     // 命中缓存：直接展示，不再消耗 core 配额（60 次/小时）
     if (!force) {
-      const cached = await storeGet<ProfileCache | null>(K_GH_PROFILE, null);
+      const cached = await storeLocalGet<ProfileCache | null>(K_GH_PROFILE, null);
       if (cached && cached.login === login && Date.now() - cached.fetchedAt < CACHE_TTL) {
         user.value = cached.user;
         activities.value = cached.activities;
@@ -735,7 +732,7 @@ export function useGithubProfile(username: Ref<string | null>, range: Ref<HeatRa
         // 新开标签页在窗口内直接提示倒计时；提示并在重置后自动重试
         const resetAt = rateLimitResetAt(response);
         if (resetAt > 0) {
-          void storeSet(K_GH_RATE_LIMIT, { resetAt });
+          void storeLocalSet(K_GH_RATE_LIMIT, { resetAt });
           error.value = rateLimitMessage(resetAt, t('gh.err.rateLimitCore'));
           retryTimer = setTimeout(() => {
             retryTimer = null;
@@ -776,14 +773,14 @@ export function useGithubProfile(username: Ref<string | null>, range: Ref<HeatRa
 
     // 资料获取成功才写缓存（404/限流/网络错误不缓存），并清除限流标记
     if (profileResult.status === 'fulfilled' && profileResult.value.ok) {
-      void storeSet(K_GH_PROFILE, {
+      void storeLocalSet(K_GH_PROFILE, {
         login,
         fetchedAt: Date.now(),
         user: user.value,
         activities: activities.value,
         contributions: contrib,
       });
-      void storeRemove(K_GH_RATE_LIMIT);
+      void storeLocalRemove(K_GH_RATE_LIMIT);
     }
   }
 
