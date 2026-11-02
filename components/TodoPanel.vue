@@ -57,11 +57,13 @@ function fmtFullDue(due: string): string {
 }
 
 /**
- * 日期标签的显示策略：
+ * 日期标签的显示策略（按「距今天数」分档，越近越强调紧迫感）：
  * - 今天 / 明天 / 后天 → 相对描述，最直观
- * - 今年的其它日期 → 只显示「月日」（不会和今年混淆）
+ * - 3~5 天 → 「仅剩 N 天」：临近截止时倒计时比「几月几号」更能看出还剩几天
+ * - 今年内的更远日期 → 只显示「月日」（不会和今年混淆）
  * - 非今年：只显示「月日」会被误读成今年，所以一年内改显示「还剩 N 天」；
  *   更远的日期用带年份的完整日期，避免出现「还剩 800 天」这种不好换算的数字
+ * - 逾期：一年内显示「已逾期 N 天」，超过一年用带年份的完整日期（与远期日期对称）
  */
 function fmtDue(due: string): string {
   const [y, m, d] = due.split('-').map(Number);
@@ -70,10 +72,14 @@ function fmtDue(due: string): string {
   if (days === 0) return t('todo.today');
   if (days === 1) return t('todo.tomorrow');
   if (days === 2) return t('todo.dayAfter');
-  if (y === new Date().getFullYear()) return t('todo.dueFormat', { m, d });
-  if (days < 0) return fmtFullDue(due); // 往年的逾期项同样带上年份
-  if (days <= 365) return t('todo.daysLeft', { n: days });
-  return fmtFullDue(due);
+  if (days > 0) {
+    if (days <= 5) return t('todo.daysLeftSoon', { n: days });
+    if (y === new Date().getFullYear()) return t('todo.dueFormat', { m, d });
+    if (days <= 365) return t('todo.daysLeft', { n: days });
+    return fmtFullDue(due);
+  }
+  if (-days <= 365) return t('todo.overdueBy', { n: -days });
+  return fmtFullDue(due); // 超过一年的逾期项带上年份，避免「已逾期 800 天」这种数字
 }
 
 function save() {
