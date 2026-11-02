@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import type { Todo } from '../utils/common';
+import type { Todo, TodoSort } from '../utils/common';
 import { useI18n } from '../utils/i18n';
 import { K_TODOS, asArray, storeGet, storeSet } from '../composables/useStorage';
 import { useToast } from '../composables/useToast';
+import { useSettings } from '../composables/useSettings';
 
 const { toast } = useToast();
 const { t } = useI18n();
+const { settings } = useSettings();
 const todos = ref<Todo[]>([]);
 
 /* 添加/编辑待办弹窗（editingId 为 null 时是「添加」模式，否则编辑该条待办） */
@@ -33,10 +35,17 @@ const PRIORITY_TEXT = computed(() => [t('todo.prio0'), t('todo.prio1'), t('todo.
 
 const DAY_MS = 86400000;
 
-/** 把截止日期解析成「当天零点」的 UTC 时间戳：用 UTC 算天数差，避开时区偏移与夏令时导致的 ±1 天误差 */
+/**
+ * 把截止日期解析成「当天零点」的 UTC 时间戳：用 UTC 算天数差，避开时区偏移与夏令时导致的 ±1 天误差。
+ * 越界日期（2026-02-30、2026-13-01 等）会被 Date.UTC 静默归一化到下个月/下一年，回读校验不一致即视为非法，返回 NaN
+ */
 function dueStamp(due: string): number {
   const [y, m, d] = due.split('-').map(Number);
-  return Date.UTC(y, (m || 1) - 1, d || 1);
+  if (!y || !m || !d) return NaN;
+  const stamp = Date.UTC(y, m - 1, d);
+  const dt = new Date(stamp);
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return NaN;
+  return stamp;
 }
 
 function todayStamp(): number {
@@ -49,10 +58,10 @@ function daysFromToday(due: string): number {
   return Math.round((dueStamp(due) - todayStamp()) / DAY_MS);
 }
 
-/** 完整日期（带年份），用作悬浮提示，任何简写形式都能在此核对 */
+/** 完整日期（带年份），用作悬浮提示，任何简写形式都能在此核对；越界日期原样返回 */
 function fmtFullDue(due: string): string {
   const [y, m, d] = due.split('-').map(Number);
-  if (!y || !m || !d) return due;
+  if (!Number.isFinite(dueStamp(due))) return due;
   return t('todo.dueFull', { y, m, d });
 }
 
@@ -69,6 +78,7 @@ function fmtDue(due: string): string {
   const [y, m, d] = due.split('-').map(Number);
   if (!y || !m || !d) return due;
   const days = daysFromToday(due);
+  if (!Number.isFinite(days)) return due; // 越界日期原样显示，避免出现「13月1日」这类假日期
   if (days === 0) return t('todo.today');
   if (days === 1) return t('todo.tomorrow');
   if (days === 2) return t('todo.dayAfter');
@@ -81,6 +91,49 @@ function fmtDue(due: string): string {
   if (-days <= 365) return t('todo.overdueBy', { n: -days });
   return fmtFullDue(due); // 超过一年的逾期项带上年份，避免「已逾期 800 天」这种数字
 }
+
+/* ---------------- 排序：默认按添加时间，可切换为截止日期优先 ---------------- */
+
+const sortMode = computed<TodoSort>(() => (settings.todoSort === 'due' ? 'due' : 'added'));
+const sortTip = computed(() => (sortMode.value === 'due' ? t('todo.sortTipDue') : t('todo.sortTipAdded')));
+
+function toggleSort() {
+  const next: TodoSort = sortMode.value === 'due' ? 'added' : 'due';
+  settings.todoSort = next;
+  toast(t('todo.sortNow', { mode: t(next === 'due' ? 'todo.sortDue' : 'todo.sortAdded') }));
+}
+
+/**
+ * 列表显示顺序（只影响渲染，不改存储顺序，随时能切回「最近添加」）：
+ * - added：存储顺序即添加时间倒序（新添加的 unshift 在最前）
+ * - due：未完成且未逾期按剩余天数升序（最临近的在上）→ 无截止日期按添加时间 →
+ *   已逾期按逾期天数（逾期越久越靠下）→ 已完成置底；同组内保持添加顺序（sort 稳定）
+ */
+const sortedTodos = computed<Todo[]>(() => {
+  if (sortMode.value === 'added') return todos.value;
+  const rankById = new Map<number, number>();
+  const daysById = new Map<number, number>();
+  for (const todo of todos.value) {
+    let days: number | null = null;
+    if (todo.due) {
+      const parsed = daysFromToday(todo.due);
+      if (Number.isFinite(parsed)) days = parsed; // 非法日期字符串按「无截止日期」处理，不参与天数差排序
+    }
+    if (days !== null) daysById.set(todo.id, days);
+    let rank = 1; // 1=无截止日期
+    if (todo.done) rank = 3; // 3=已完成
+    else if (days !== null) rank = days >= 0 ? 0 : 2; // 0=临近，2=已逾期
+    rankById.set(todo.id, rank);
+  }
+  return [...todos.value].sort((a, b) => {
+    const rank = rankById.get(a.id) ?? 0;
+    const rankDiff = rank - (rankById.get(b.id) ?? 0);
+    if (rankDiff) return rankDiff;
+    if (rank === 1 || rank === 3) return 0; // 无截止日期 / 已完成：保持添加顺序
+    const daysDiff = (daysById.get(a.id) ?? 0) - (daysById.get(b.id) ?? 0);
+    return rank === 2 ? -daysDiff : daysDiff; // 逾期组反向：剩余天数越负（逾期越久）越靠下
+  });
+});
 
 function save() {
   storeSet(K_TODOS, todos.value);
@@ -152,8 +205,9 @@ function toggleTodo(todo: Todo) {
   save();
 }
 
-function removeTodo(idx: number) {
-  todos.value.splice(idx, 1);
+/** 按 id 删除：列表按排序规则重排后下标不再对应存储位置，用下标会删错条目 */
+function removeTodo(id: number) {
+  todos.value = todos.value.filter((item) => item.id !== id);
   save();
 }
 
@@ -182,12 +236,26 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
         <h2>{{ t('todo.title') }}</h2>
         <div class="card-sub">{{ t('todo.sub') }}</div>
       </div>
-      <span class="badge">{{ undone }}</span>
+      <div class="head-actions">
+        <button
+          class="icon-btn small todo-sort"
+          :title="sortTip"
+          :aria-label="sortTip"
+          :aria-pressed="sortMode === 'due'"
+          @click="toggleSort"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M7 4v16M7 20l-3-3M7 20l3-3" />
+            <path d="M17 20V4M17 4l-3 3M17 4l3 3" />
+          </svg>
+        </button>
+        <span class="badge">{{ undone }}</span>
+      </div>
     </div>
     <button class="todo-add-strip" @click="openModal">{{ t('todo.add') }}</button>
     <ul class="todo-list">
       <li v-if="!todos.length" class="todo-empty">{{ t('todo.empty') }}</li>
-      <li v-for="(todo, idx) in todos" :key="todo.id">
+      <li v-for="todo in sortedTodos" :key="todo.id">
         <button
           class="todo-check"
           :class="{ done: todo.done }"
@@ -215,7 +283,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKeydown));
         </span>
         <span class="todo-acts">
           <button class="todo-edit" :title="t('todo.edit')" @click="openEditModal(todo)">✎</button>
-          <button class="todo-del" :title="t('subbar.delete')" @click="removeTodo(idx)">✕</button>
+          <button class="todo-del" :title="t('subbar.delete')" @click="removeTodo(todo.id)">✕</button>
         </span>
       </li>
     </ul>

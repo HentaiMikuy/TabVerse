@@ -410,6 +410,7 @@ body.edit-mode .pill .pill-del {
   margin-bottom: 12px;
 }
 .head-text .card-sub { margin-top: 3px; font-size: 12px; color: var(--faint); }
+.head-actions { flex: none; display: flex; align-items: center; gap: 6px; }
 .badge {
   min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px;
   background: var(--hover-bg); color: var(--text-dim);

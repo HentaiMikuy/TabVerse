@@ -12,7 +12,7 @@ export default defineConfig({
   manifest: {
     key: EXTENSION_KEY,
     name: 'TabVerse',
-    version: '0.6.3',
+    version: '0.6.4',
     description: '更聚合、更好用的新标签页信息仪表盘：聚合搜索、快捷访问、天气、待办、书签，RSS 阅读与 GitHub 动态。',
     minimum_chrome_version: '100',
     chrome_url_overrides: {

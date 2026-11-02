@@ -11,6 +11,9 @@ export type BgType = 'none' | 'image' | 'video';
 /** 界面显示语言：auto 跟随浏览器 */
 export type Lang = 'auto' | 'zh-CN' | 'en';
 
+/** 待办列表排序方式：added=最近添加在上（默认），due=截止日期优先（临近在上，逾期与已完成置底） */
+export type TodoSort = 'added' | 'due';
+
 export interface Settings {
   engineId: string;
   theme: 'light' | 'dark';
@@ -29,6 +32,8 @@ export interface Settings {
   timezone: string;
   /** 界面显示语言 */
   lang: Lang;
+  /** 待办排序方式（切换入口在待办卡片标题栏，偏好随设置同步） */
+  todoSort: TodoSort;
 }
 
 /** 贡献热力图显示时间范围 */
@@ -87,6 +92,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bgScrim: 0.35,
   timezone: '',
   lang: 'auto',
+  todoSort: 'added',
 };
 
 /** 可选的时钟时区（IANA 时区 ID），空字符串表示跟随系统本地时间；name 按语言提供 */
